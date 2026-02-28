@@ -1,0 +1,5 @@
+{
+  "name": "Cafe Order App v2",
+  "description": "Menu app for a cafe that sends orders to Google Sheets via Apps Script.",
+  "requestFramePermissions": []
+}

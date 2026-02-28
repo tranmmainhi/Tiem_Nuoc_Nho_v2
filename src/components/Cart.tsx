@@ -1,0 +1,873 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trash2, Plus, Minus, ArrowRight, AlertCircle, Edit2, X, ShoppingBag, Clock, CheckCircle2, RefreshCw, ChevronRight, Sparkles, User } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI, Type } from "@google/genai";
+import { CartItem, OrderData } from '../types';
+import { SIZES, TOPPINGS } from './Menu';
+import { useUI } from '../context/UIContext';
+import { useData } from '../context/DataContext';
+
+interface CartProps {
+  cart: CartItem[];
+  updateQuantity: (id: string, delta: number) => void;
+  updateCartItem: (id: string, updatedItem: CartItem) => void;
+  clearCart: () => void;
+  restoreCart: (items: CartItem[]) => void;
+  appsScriptUrl: string;
+  onNavigateSettings: () => void;
+}
+
+export function Cart({ cart, updateQuantity, updateCartItem, clearCart, restoreCart, appsScriptUrl, onNavigateSettings }: CartProps) {
+  const { setIsFabHidden } = useUI();
+  const { orders, createOrder, fetchAllData } = useData();
+  const [customerName, setCustomerName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [tableNumber, setTableNumber] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản'>('Tiền mặt');
+  const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutoSubmitEnabled, setIsAutoSubmitEnabled] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [editingItem, setEditingItem] = useState<CartItem | null>(null);
+  const [submittedOrder, setSubmittedOrder] = useState<OrderData | null>(() => {
+    const saved = localStorage.getItem('submittedOrder');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [aiEmptyState, setAiEmptyState] = useState<{title: string, content: string, button: string, emoji: string} | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+  const emptyStates = [
+    {
+      title: "Cốc của bạn đang buồn hiu...",
+      content: "Chưa có giọt nước nào trong đơn cả. Đừng để cổ họng khô khốc, \"chốt đơn\" ngay ly trà sữa full topping đi!",
+      button: "Uống ngay cho đã!",
+      emoji: "🥺"
+    },
+    {
+      title: "Sạch bóng ly cốc!",
+      content: "Chưa thấy một dấu vết nào của sự giải khát ở đây cả. Bạn định nhịn uống để dành tiền lấy vợ/chồng à?",
+      button: "Phung phí chút đi!",
+      emoji: "💸"
+    },
+    {
+      title: "Một sự trống trải...",
+      content: "Lịch sử order của bạn còn sạch hơn cả ly nước lọc. Mau \"vấy bẩn\" nó bằng vài ly trà sữa béo ngậy đi!",
+      button: "Lên đơn cho đỡ khát",
+      emoji: "💅"
+    },
+    {
+      title: "Tìm đỏ mắt không thấy đơn!",
+      content: "Lục tung cái app này lên cũng không thấy bạn đã uống gì. Đừng để máy pha cà phê ngồi chơi xơi nước nữa bạn ơi!",
+      button: "Tạo công ăn việc làm ngay",
+      emoji: "👀"
+    },
+    {
+      title: "Trống trơn!",
+      content: "Nhìn gì mà nhìn? Chưa đặt ly nào thì lấy đâu ra lịch sử mà xem. Quay lại menu gấp!",
+      button: "Đi đặt nước ngay đi!",
+      emoji: "🙄"
+    },
+    {
+      title: "Giỏ hàng đang 'khát'",
+      content: "Giỏ hàng đang trống trải như ví tiền cuối tháng vậy. Chọn nước ngay thôi đồng chí ơi!",
+      button: "Triển thôi!",
+      emoji: "💀"
+    },
+    {
+      title: "Barista đang đợi",
+      content: "Đừng để Barista đợi chờ trong vô vọng, lên đơn ngay và luôn nào!",
+      button: "Lên đơn!",
+      emoji: "👨‍🍳"
+    },
+    {
+      title: "Máy xay mốc meo rồi",
+      content: "Máy xay đang mốc meo rồi, chọn đại một ly sinh tố cho vui cửa vui nhà đi!",
+      button: "Cứu khát!",
+      emoji: "🕸️"
+    },
+    {
+      title: "Tính xem bói hả?",
+      content: "Tính xem bói hay sao mà chưa chọn món nào thế? Quay lại thực đơn ngay!",
+      button: "Xem menu!",
+      emoji: "🔮"
+    },
+    {
+      title: "Hông có gì giải nhiệt",
+      content: "Hông chọn món là hông có gì giải nhiệt đâu nha. Quay lại menu thôi nè!",
+      button: "Triển ngay!",
+      emoji: "🫠"
+    },
+    {
+      title: "Menu bao la",
+      content: "Menu bao la mà chưa thấy món nào vào 'mắt xanh' của bạn sao? Thử lại xem!",
+      button: "Thử lại!",
+      emoji: "✨"
+    },
+    {
+      title: "Đang đợi chốt đơn",
+      content: "Tình trạng: Đang đợi chốt đơn. Đừng để tui đợi lâu, tui dỗi đó!",
+      button: "Chốt đơn!",
+      emoji: "😤"
+    },
+    {
+      title: "Uống không khí hả?",
+      content: "Ủa rồi có chọn món không hay định uống không khí? Quay lại menu gấp!",
+      button: "Uống món ngon!",
+      emoji: "🤡"
+    },
+    {
+      title: "Trống như NYC",
+      content: "Order trống trơn như người yêu cũ vậy. Quay lại tìm 'mối' mới trong menu đi!",
+      button: "Tìm mối mới!",
+      emoji: "💔"
+    },
+    {
+      title: "Ảo thuật gia à?",
+      content: "Định làm ảo thuật cho ly nước tự hiện ra à? Phải chọn thì mới có đơn chứ!",
+      button: "Chọn món!",
+      emoji: "🎩"
+    }
+  ];
+
+  const randomState = useMemo(() => {
+    // 1. Get cached AI messages
+    const cached = localStorage.getItem('ai_generated_messages');
+    const aiMessages = cached ? JSON.parse(cached) : [];
+    
+    // 2. Combine with static messages
+    const allMessages = [...emptyStates, ...aiMessages];
+    
+    // 3. Pick one randomly
+    return allMessages[Math.floor(Math.random() * allMessages.length)];
+  }, [cart.length === 0]);
+
+  const generateAIEmptyState = async () => {
+    if (isGeneratingAI) return;
+    
+    // Check if AI is enabled in settings
+    const isAIEnabled = localStorage.getItem('enableAI') !== 'false';
+    if (!isAIEnabled) return;
+
+    // Clear error if it's older than 10 minutes
+    const lastError = localStorage.getItem('ai_last_error_time');
+    if (lastError && Date.now() - parseInt(lastError) > 10 * 60 * 1000) {
+      localStorage.removeItem('ai_last_error_time');
+    }
+
+    // 1. Luân phiên: Chỉ gọi AI 30% số lần hoặc khi chưa có mẫu AI nào lưu lại
+    const cached = localStorage.getItem('ai_generated_messages');
+    const aiMessages = cached ? JSON.parse(cached) : [];
+    const shouldCallAI = aiMessages.length < 5 || Math.random() < 0.3;
+    
+    if (!shouldCallAI) return;
+
+    // 2. Rate limit: Don't try again if we hit a quota error recently
+    if (localStorage.getItem('ai_last_error_time')) {
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    try {
+      // Get menu data for context
+      const menuData = localStorage.getItem('menu_data');
+      let menuContext = "";
+      if (menuData) {
+        try {
+          const items = JSON.parse(menuData);
+          const available = items.filter((i: any) => !i.isOutOfStock).map((i: any) => i.name);
+          const randomItems = available.sort(() => 0.5 - Math.random()).slice(0, 3);
+          if (randomItems.length > 0) {
+            menuContext = `Hãy nhắc đến các món này: ${randomItems.join(', ')}.`;
+          }
+        } catch (e) {}
+      }
+
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview", // Model tối ưu nhất cho text
+        contents: `Tạo 1 thông báo giỏ hàng trống cho app quán nước. 
+        Style: GenZ, lầy lội, phũ, thả thính. ${menuContext}
+        Tiêu đề < 25 ký tự, Nội dung < 80 ký tự. 
+        Trả về JSON: title, content, button, emoji.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              content: { type: Type.STRING },
+              button: { type: Type.STRING },
+              emoji: { type: Type.STRING }
+            },
+            required: ["title", "content", "button", "emoji"]
+          }
+        }
+      });
+      
+      const result = JSON.parse(response.text || '{}');
+      if (result.title && result.content && result.button) {
+        localStorage.removeItem('ai_last_error_time');
+        
+        const isDuplicate = aiMessages.some((msg: any) => msg.title === result.title || msg.content === result.content);
+        if (!isDuplicate) {
+          const newCache = [result, ...aiMessages].slice(0, 20); // Lưu tối đa 20 mẫu từ AI
+          localStorage.setItem('ai_generated_messages', JSON.stringify(newCache));
+        }
+      }
+    } catch (e: any) {
+      // Ẩn thông báo lỗi, tự động dùng mẫu cũ
+      if (e.message?.includes('429') || e.message?.includes('quota')) {
+        localStorage.setItem('ai_last_error_time', Date.now().toString());
+      }
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      generateAIEmptyState();
+    }
+  }, [cart.length]);
+
+  useEffect(() => {
+    setIsFabHidden(showClearConfirm || !!editingItem);
+    return () => setIsFabHidden(false);
+  }, [showClearConfirm, editingItem, setIsFabHidden]);
+
+  const total = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+
+  useEffect(() => {
+    if (submittedOrder) {
+      const globalOrder = orders.find(o => o.orderId === submittedOrder.orderId);
+      if (globalOrder && globalOrder.orderStatus !== submittedOrder.orderStatus) {
+        setSubmittedOrder(globalOrder);
+        localStorage.setItem('submittedOrder', JSON.stringify(globalOrder));
+      }
+    }
+  }, [orders, submittedOrder]);
+
+  const handleOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appsScriptUrl) {
+      onNavigateSettings();
+      return;
+    }
+
+    if (cart.length === 0) return;
+
+    setIsSubmitting(true);
+    setSubmitStatus('idle');
+
+    const ma_don = `ORD-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    const totalQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Format ten_mon as a string: "1x CÀ PHÊ ĐEN, 2x TRÀ ĐÀO"
+    const ten_mon_str = cart.map(item => `${item.quantity}x ${item.name.toUpperCase()}`).join(', ');
+
+    const orderData: OrderData = {
+      orderId: ma_don,
+      customerName,
+      phoneNumber,
+      tableNumber,
+      items: cart,
+      total,
+      timestamp: new Date().toISOString(),
+      notes,
+      paymentMethod,
+      orderStatus: 'Chờ xử lý',
+      paymentStatus: paymentMethod === 'Tiền mặt' ? 'Chưa thanh toán' : 'Đã thanh toán',
+    };
+
+    const payload = {
+      ma_don: ma_don,
+      so_luong: totalQuantity,
+      ten_mon: ten_mon_str,
+      tong_tien: total,
+      ghi_chu: notes,
+      ten_khach_hang: customerName,
+      so_ban: tableNumber,
+      thanh_toan: paymentMethod,
+      so_dien_thoai: phoneNumber
+    };
+
+    try {
+      const success = await createOrder(payload);
+
+      if (!success) {
+        throw new Error('Có lỗi xảy ra khi gửi đơn hàng.');
+      }
+
+      setSubmitStatus('success');
+      
+      clearCart();
+      setCustomerName('');
+      setTableNumber('');
+      setNotes('');
+
+      if (isAutoSubmitEnabled) {
+        setSubmittedOrder(null);
+        localStorage.removeItem('submittedOrder');
+      } else {
+        setSubmittedOrder(orderData);
+        localStorage.setItem('submittedOrder', JSON.stringify(orderData));
+      }
+
+      localStorage.removeItem('sync_error');
+    } catch (error: any) {
+      localStorage.setItem('sync_error', 'true');
+      setErrorMessage(error.message || 'Có lỗi xảy ra khi gửi đơn hàng. Vui lòng thử lại.');
+      setSubmitStatus('error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!submittedOrder) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'cancelOrder', orderId: submittedOrder.orderId }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        setSubmittedOrder(null);
+        localStorage.removeItem('submittedOrder');
+        setSubmitStatus('idle');
+        await fetchAllData(false); // Refetch data
+      } else {
+        throw new Error(data.message || 'Lỗi khi hủy đơn');
+      }
+    } catch (err) {
+      alert('Không thể hủy đơn hàng. Vui lòng thử lại.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditOrder = async () => {
+    if (!submittedOrder) return;
+    setIsSubmitting(true);
+    try {
+      await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'cancelOrder', orderId: submittedOrder.orderId }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      });
+      restoreCart(submittedOrder.items);
+
+      setCustomerName(submittedOrder.customerName);
+      setPhoneNumber(submittedOrder.phoneNumber || '');
+      setTableNumber(submittedOrder.tableNumber || '');
+      setNotes(submittedOrder.notes || '');
+      setSubmittedOrder(null);
+      localStorage.removeItem('submittedOrder');
+      setSubmitStatus('idle');
+      await fetchAllData(false); // Refetch data
+    } catch (err) {
+      alert('Không thể chỉnh sửa lúc này. Vui lòng thử lại.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+    if (submittedOrder) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-full px-6 py-10 text-center">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-24 h-24 bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-400 rounded-[32px] flex items-center justify-center mb-8"
+        >
+          <CheckCircle2 className="w-12 h-12" />
+        </motion.div>
+        
+        <h2 className="text-3xl font-black text-stone-800 dark:text-white mb-2">Đặt hàng thành công!</h2>
+        <p className="text-stone-500 dark:text-stone-400 mb-8">Mã đơn: <span className="text-stone-800 dark:text-white font-bold">{submittedOrder.orderId}</span></p>
+
+        <div className="w-full bg-white dark:bg-stone-900 rounded-[32px] p-6 shadow-sm border border-stone-100 dark:border-stone-800 text-left space-y-4 mb-8">
+          <div className="flex justify-between items-center pb-4 border-b border-stone-50 dark:border-stone-800">
+            <span className="text-stone-400 dark:text-stone-500 font-bold text-xs uppercase tracking-widest">Trạng thái</span>
+            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+              submittedOrder.orderStatus === 'Hoàn thành' ? 'bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-400' :
+              submittedOrder.orderStatus === 'Đã hủy' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' :
+              'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+            }`}>
+              {submittedOrder.orderStatus}
+            </span>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-stone-400 dark:text-stone-500">Số điện thoại</span>
+              <span className="font-bold text-stone-800 dark:text-white">{submittedOrder.phoneNumber}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-stone-400 dark:text-stone-500">Thanh toán</span>
+              <span className="font-bold text-stone-800 dark:text-white">{submittedOrder.paymentMethod}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-stone-400 dark:text-stone-500">Tổng tiền</span>
+              <span className="font-black text-[#C9252C] dark:text-red-400 text-lg">{submittedOrder.total.toLocaleString()}đ</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full space-y-3">
+          <div className="flex gap-3">
+            <button
+              onClick={handleEditOrder}
+              disabled={isSubmitting}
+              className="flex-1 py-4 bg-red-50 dark:bg-red-900/20 text-[#B91C1C] dark:text-red-300 font-bold rounded-2xl tap-active flex items-center justify-center gap-2"
+            >
+              <Edit2 className="w-4 h-4" />
+              Sửa đơn
+            </button>
+            <button
+              onClick={handleCancelOrder}
+              disabled={isSubmitting}
+              className="flex-1 py-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-2xl tap-active flex items-center justify-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              Hủy đơn
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              setSubmittedOrder(null);
+              localStorage.removeItem('submittedOrder');
+              setSubmitStatus('idle');
+            }}
+            className="w-full py-5 bg-[#C9252C] text-white font-black rounded-2xl tap-active shadow-xl shadow-red-100 dark:shadow-none"
+          >
+            Đặt đơn mới
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (cart.length === 0) {
+    const isAIEnabled = localStorage.getItem('enableAI') !== 'false';
+    // Use randomState which now includes cached AI messages, or fallback to static if AI disabled
+    const displayState = isAIEnabled ? randomState : emptyStates[0];
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] text-center px-8 relative">
+        {/* AI Indicator */}
+        <div className="absolute top-4 right-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-500">
+          {isAIEnabled ? (
+            <><span className="w-2 h-2 rounded-full bg-emerald-500"></span> AI Bật</>
+          ) : (
+            <><span className="w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-700"></span> AI Tắt</>
+          )}
+        </div>
+
+        <div className="relative mb-8">
+          <div className="w-24 h-24 bg-stone-50 dark:bg-stone-800 rounded-[32px] flex items-center justify-center text-5xl">
+            {displayState.emoji}
+          </div>
+          {/* Hidden AI generation indicator */}
+        </div>
+        <h2 className="text-2xl font-black text-stone-800 dark:text-white mb-3">{displayState.title}</h2>
+        <p className="text-stone-500 dark:text-stone-400 mb-10 leading-relaxed">
+          {displayState.content}
+        </p>
+        <div className="w-full">
+          <button
+            onClick={() => window.location.hash = '#/'}
+            className="w-full py-5 bg-[#C9252C] text-white font-black rounded-2xl tap-active shadow-xl shadow-red-100 dark:shadow-none"
+          >
+            {displayState.button}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col min-h-full pb-32">
+      <div className="p-5 space-y-8">
+        {/* Cart Items */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Món đã chọn ({cart.length})</h2>
+            <button onClick={() => setShowClearConfirm(true)} className="text-red-500 font-bold text-xs tap-active bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg">Xóa tất cả</button>
+          </div>
+          
+          <div className="space-y-4">
+            <AnimatePresence mode="popLayout">
+              {cart.map((item, index) => (
+                <motion.div
+                  layout
+                  key={`${item.cartItemId}-${index}`}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="card p-5 border border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900"
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="min-w-0 flex-grow pr-4">
+                      <h3 className="font-bold text-stone-800 dark:text-white text-lg truncate leading-tight mb-1">{item.name}</h3>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-stone-50 dark:bg-stone-800 text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
+                          {item.temperature}
+                        </span>
+                        {item.iceLevel && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-stone-50 dark:bg-stone-800 text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
+                            {item.iceLevel} đá
+                          </span>
+                        )}
+                        {item.sugarLevel && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-stone-50 dark:bg-stone-800 text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
+                            {item.sugarLevel} đường
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[#C9252C] font-black text-lg whitespace-nowrap">
+                      {(item.unitPrice * item.quantity).toLocaleString()}đ
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center justify-between pt-2 border-t border-stone-50 dark:border-stone-800 mt-2">
+                    <div className="flex items-center bg-stone-50 dark:bg-stone-800 rounded-[14px] p-1 border border-stone-100 dark:border-stone-700">
+                      <button onClick={() => updateQuantity(item.cartItemId, -1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Minus className="w-4 h-4" /></button>
+                      <span className="w-10 text-center font-black text-sm text-stone-800 dark:text-white">{item.quantity}</span>
+                      <button onClick={() => updateQuantity(item.cartItemId, 1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Plus className="w-4 h-4" /></button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingItem(item)} className="w-9 h-9 flex items-center justify-center bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 rounded-[14px] tap-active border border-stone-100 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 hover:text-stone-600 dark:hover:text-stone-300"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => updateQuantity(item.cartItemId, -item.quantity)} className="w-9 h-9 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 rounded-[14px] tap-active border border-red-100 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </section>
+
+        {/* Order Form */}
+        <section className="card p-6 border border-stone-100 dark:border-stone-800 space-y-6 bg-white dark:bg-stone-900">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-50 dark:bg-red-900/20 text-[#C9252C] rounded-[14px] flex items-center justify-center">
+                <User className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-black text-stone-800 dark:text-white text-lg">Thông tin nhận món</h2>
+                <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">Delivery Info</p>
+              </div>
+            </div>
+            
+            {/* Auto Submit Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Tự động gửi</span>
+              <button 
+                onClick={() => setIsAutoSubmitEnabled(!isAutoSubmitEnabled)}
+                className={`w-12 h-7 rounded-full transition-colors relative ${isAutoSubmitEnabled ? 'bg-[#C9252C]' : 'bg-stone-200 dark:bg-stone-700'}`}
+              >
+                <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${isAutoSubmitEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Tên của bạn</label>
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Nhập tên..."
+                className="input-field"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số điện thoại</label>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="Nhập số điện thoại..."
+                className="input-field"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số bàn (Tùy chọn)</label>
+              <input
+                type="text"
+                value={tableNumber}
+                onChange={(e) => setTableNumber(e.target.value)}
+                placeholder="Ví dụ: 05"
+                className="input-field"
+              />
+            </div>
+            
+            <div className="space-y-3">
+              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Thanh toán</label>
+              <div className="grid grid-cols-2 gap-3">
+                {['Tiền mặt', 'Chuyển khoản'].map((method) => (
+                  <button
+                    key={method}
+                    onClick={() => setPaymentMethod(method as any)}
+                    className={`py-4 rounded-[18px] font-bold text-sm border transition-all tap-active relative overflow-hidden ${
+                      paymentMethod === method 
+                        ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300 shadow-sm' 
+                        : 'border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500'
+                    }`}
+                  >
+                    {method}
+                    {paymentMethod === method && (
+                      <div className="absolute top-2 right-2 w-2 h-2 bg-[#C9252C] rounded-full" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Ghi chú</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Ví dụ: Ít đá, nhiều sữa..."
+                className="input-field resize-none min-h-[80px]"
+                rows={2}
+              />
+            </div>
+          </div>
+        </section>
+
+        {submitStatus === 'error' && (
+          <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-[20px] flex items-center gap-3 border border-red-100 dark:border-red-900/30 animate-shake">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm font-bold">{errorMessage}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky Footer Summary */}
+      <div className="fixed bottom-20 left-0 right-0 p-5 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-stone-100/50 dark:border-stone-800/50 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] dark:shadow-none transition-colors">
+        <div className="flex items-center justify-between mb-4 px-1">
+          <div className="relative">
+            <p className="text-stone-400 dark:text-stone-500 text-[10px] font-black uppercase tracking-widest mb-0.5">Tổng thanh toán</p>
+            <div className="flex items-center gap-2">
+              <motion.p 
+                animate={isSubmitting ? { scale: [1, 1.05, 1], opacity: [1, 0.7, 1] } : {}}
+                transition={{ duration: 1, repeat: Infinity }}
+                className="text-2xl font-black text-[#C9252C]"
+              >
+                {total.toLocaleString()}đ
+              </motion.p>
+              <AnimatePresence>
+                {isSubmitting && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0 }}
+                  >
+                    <Sparkles className="w-4 h-4 text-red-400 animate-pulse" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-stone-400 dark:text-stone-500 text-[10px] font-black uppercase tracking-widest mb-0.5">Số lượng</p>
+            <motion.p 
+              animate={isSubmitting ? { y: [0, -2, 0] } : {}}
+              transition={{ duration: 0.5, repeat: Infinity }}
+              className="text-stone-800 dark:text-white font-bold"
+            >
+              {cart.length} món
+            </motion.p>
+          </div>
+        </div>
+        <button
+          onClick={handleOrder}
+          disabled={isSubmitting || !customerName}
+          className="w-full bg-[#C9252C] text-white py-4 rounded-[20px] font-black text-lg shadow-xl shadow-red-100 dark:shadow-none tap-active flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale transition-all hover:bg-red-600 relative overflow-hidden"
+        >
+          <AnimatePresence mode="wait">
+            {isSubmitting ? (
+              <motion.div
+                key="submitting"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex items-center gap-3"
+              >
+                <div className="relative">
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                    className="absolute inset-0 bg-white/30 rounded-full"
+                  />
+                </div>
+                <span>Đang gửi đơn...</span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex items-center gap-3"
+              >
+                <ShoppingBag className="w-5 h-5" />
+                <span>Gửi đơn hàng</span>
+                <ChevronRight className="w-5 h-5 opacity-50" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </button>
+      </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white dark:bg-stone-900 rounded-[32px] p-8 max-w-sm w-full shadow-2xl border border-stone-100 dark:border-stone-800">
+              <h3 className="text-xl font-extrabold text-stone-800 dark:text-white mb-3">Xác nhận xóa?</h3>
+              <p className="text-stone-500 dark:text-stone-400 mb-8 leading-relaxed">Bạn có chắc chắn muốn xóa tất cả món trong giỏ hàng không?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowClearConfirm(false)} className="flex-1 py-4 rounded-2xl font-bold text-stone-400 dark:text-stone-500 tap-active">Hủy</button>
+                <button onClick={() => { clearCart(); setShowClearConfirm(false); }} className="flex-1 py-4 rounded-2xl font-bold text-white bg-red-500 tap-active shadow-lg shadow-red-100 dark:shadow-none">Xóa hết</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {editingItem && (
+          <EditCartItemModal
+            item={editingItem}
+            onClose={() => setEditingItem(null)}
+            onSave={(updated) => {
+              updateCartItem(editingItem.cartItemId, updated);
+              setEditingItem(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose: () => void; onSave: (item: CartItem) => void }) {
+  const [temperature, setTemperature] = useState(item.temperature || 'Đá');
+  const [sugarLevel, setSugarLevel] = useState(item.sugarLevel || 'Bình thường');
+  const [iceLevel, setIceLevel] = useState(item.iceLevel || 'Bình thường');
+  const [note, setNote] = useState(item.note || '');
+
+  const unitPrice = item.price;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end justify-center z-[60]">
+      <motion.div 
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        className="bg-white dark:bg-stone-900 rounded-t-[40px] w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border-t border-stone-100 dark:border-stone-800"
+      >
+        <div className="px-8 py-6 flex justify-between items-center border-b border-stone-50 dark:border-stone-800">
+          <h2 className="text-2xl font-black text-stone-800 dark:text-white">Chỉnh sửa món</h2>
+          <button onClick={onClose} className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+        
+        <div className="flex-grow overflow-y-auto px-8 py-6 space-y-10 scrollbar-hide">
+          <div className="grid grid-cols-1 gap-8">
+            <section>
+              <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Nhiệt độ</h4>
+              <div className="flex gap-2">
+                {['Nóng', 'Đá', 'Đá riêng'].map(temp => (
+                  <button
+                    key={temp}
+                    onClick={() => setTemperature(temp)}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all tap-active ${
+                      temperature === temp ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                    }`}
+                  >
+                    {temp}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {(temperature === 'Đá') && (
+              <section>
+                <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đá</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {['Ít', 'Vừa', 'Bình thường'].map(level => (
+                    <button
+                      key={level}
+                      onClick={() => setIceLevel(level)}
+                      className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
+                        iceLevel === level ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đường</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {['Ít ngọt', 'Vừa', 'Bình thường', 'Ngọt', 'Đường kiêng'].map(level => (
+                  <button
+                    key={level}
+                    onClick={() => setSugarLevel(level === 'Đường kiêng' ? '1 gói đường kiêng' : level)}
+                    className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
+                      (level === 'Đường kiêng' ? sugarLevel === '1 gói đường kiêng' : sugarLevel === level)
+                        ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' 
+                        : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <section>
+            <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Ghi chú</h4>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="input-field p-5 rounded-[24px] resize-none text-sm font-medium"
+              rows={2}
+            />
+          </section>
+        </div>
+
+        <div className="p-8 bg-white dark:bg-stone-900 border-t border-stone-50 dark:border-stone-800">
+          <button
+            onClick={() => onSave({
+              ...item,
+              unitPrice,
+              temperature,
+              sugarLevel,
+              iceLevel: temperature === 'Đá' ? iceLevel : (temperature === 'Đá riêng' ? 'Bình thường' : undefined),
+              note,
+            })}
+            className="btn-primary shadow-xl shadow-red-200 dark:shadow-red-900/20"
+          >
+            Lưu thay đổi
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
