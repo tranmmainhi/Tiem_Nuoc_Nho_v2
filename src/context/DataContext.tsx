@@ -22,6 +22,7 @@ interface DataContextType {
   menuItems: MenuItem[];
   orders: OrderData[];
   inventoryItems: InventoryItem[];
+  financeData: any[];
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -42,6 +43,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [financeData, setFinanceData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const [isOnline, setIsOnline] = useState(true);
   const [refreshInterval, setRefreshIntervalState] = useState(() => {
     const saved = localStorage.getItem('refreshInterval');
-    return saved ? Math.max(15, Number(saved)) : 30;
+    return saved ? Math.max(15, Number(saved)) : 15;
   });
   const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => {
     const saved = localStorage.getItem('autoSyncEnabled');
@@ -170,6 +172,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           }
         });
         setInventoryItems(mappedInventoryItems);
+      }
+
+      // Fetch Finance Report
+      try {
+        const financeRes = await fetch(`${appsScriptUrl}?action=getFinanceReport`, { credentials: 'omit' });
+        if (financeRes.ok) {
+          const finJson = await financeRes.json();
+          const finData = (finJson && typeof finJson === 'object' && Array.isArray(finJson.data))
+            ? finJson.data
+            : (Array.isArray(finJson) ? finJson : []);
+          setFinanceData(finData);
+        }
+      } catch (finError) {
+        console.warn('Failed to fetch finance report:', finError);
       }
 
       if (Array.isArray(menuData)) {
@@ -332,6 +348,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       menuItems, 
       orders, 
       inventoryItems,
+      financeData,
       isLoading, 
       isRefreshing, 
       error, 

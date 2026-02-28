@@ -14,7 +14,7 @@ interface StaffViewProps {
   appsScriptUrl: string;
 }
 
-type ViewMode = 'dashboard' | 'orders' | 'expenses' | 'inventory' | 'menu' | 'cash';
+type ViewMode = 'dashboard' | 'orders' | 'expenses' | 'inventory' | 'menu' | 'cash' | 'finance';
 type TimeRange = 'day' | 'week' | 'month' | 'year';
 
 const MATERIALS = [
@@ -724,6 +724,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               { id: 'expenses', label: 'Chi tiêu', icon: Wallet },
               { id: 'inventory', label: 'Nhập kho', icon: Package },
               { id: 'cash', label: 'Sổ quỹ', icon: DollarSign },
+              { id: 'finance', label: 'Tài chính', icon: FileText },
             ].map((tab) => {
               const isActive = viewMode === tab.id;
               const Icon = tab.icon;
@@ -1495,6 +1496,61 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   </button>
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {viewMode === 'finance' && (
+            <motion.div
+              key="finance"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-5"
+            >
+              <div className="flex justify-between items-center px-1">
+                <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Báo cáo tài chính (FINANCE_REPORT)</h2>
+                <button 
+                  onClick={() => fetchAllData(false)}
+                  className="w-10 h-10 bg-white dark:bg-stone-900 rounded-[14px] border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-stone-900 rounded-[24px] border border-stone-100 dark:border-stone-800 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-stone-50 dark:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800">
+                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest">Ngày</th>
+                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest">Mã đơn</th>
+                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Tổng thu</th>
+                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">VAT 8%</th>
+                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Thuần</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {useData().financeData.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-12 text-center text-stone-400 font-bold">Chưa có dữ liệu báo cáo</td>
+                        </tr>
+                      ) : (
+                        useData().financeData.slice().reverse().map((row, idx) => (
+                          <tr key={`finance-row-${idx}`} className="border-b border-stone-50 dark:border-stone-800 last:border-0 hover:bg-stone-50/50 dark:hover:bg-stone-800/20 transition-colors">
+                            <td className="p-4 text-xs font-bold text-stone-600 dark:text-stone-400">
+                              {new Date(row["Ngày"] || row["timestamp"] || "").toLocaleDateString('vi-VN')}
+                            </td>
+                            <td className="p-4 text-xs font-black text-stone-800 dark:text-white">#{row["Mã đơn"] || row["orderId"]}</td>
+                            <td className="p-4 text-xs font-black text-emerald-600 text-right">{Number(row["Tổng thu"] || row["total"] || 0).toLocaleString()}đ</td>
+                            <td className="p-4 text-xs font-bold text-red-500 text-right">{Number(row["VAT 8%"] || row["vat"] || 0).toLocaleString()}đ</td>
+                            <td className="p-4 text-xs font-black text-blue-600 text-right">{Number(row["Thuần"] || row["net"] || 0).toLocaleString()}đ</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </motion.div>
           )}
 

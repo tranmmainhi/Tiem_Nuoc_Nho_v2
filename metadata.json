@@ -1,5 +1,5 @@
 {
-  "name": "Cafe Order App v2",
-  "description": "Menu app for a cafe that sends orders to Google Sheets via Apps Script.",
+  "name": "TIỆM NƯỚC NHỎ V2",
+  "description": "Hệ thống quản lý đơn hàng, tồn kho và tài chính cho Tiệm Nước Nhỏ.",
   "requestFramePermissions": []
 }
