@@ -985,7 +985,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-tight">Cơ cấu chi phí theo danh mục</h3>
                     <BarChart3 className="w-4 h-4 text-stone-400" />
                   </div>
-                  <div className="h-[250px] w-full">
+                  <div className="h-[250px] w-full min-h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={stats.expenseData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -1045,7 +1045,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-tight">Cơ cấu chi phí theo danh mục</h3>
                     <BarChart3 className="w-4 h-4 text-stone-400" />
                   </div>
-                  <div className="h-[250px] w-full">
+                  <div className="h-[250px] w-full min-h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={stats.monthlyExpenseChartData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -1161,7 +1161,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   </div>
                 </div>
 
-                <div className="h-64">
+                <div className="h-64 min-h-[256px]">
                   <p className="text-[10px] font-bold text-stone-400 mb-4 text-center">Biểu đồ chi phí theo danh mục (Tháng này)</p>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.monthlyExpenseChartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
@@ -1183,7 +1183,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               <div className="space-y-6">
                 <div className="bg-white dark:bg-stone-900 p-6 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-none">
                   <h3 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-6">Phân bổ chi tiêu</h3>
-                  <div className="h-64 relative">
+                  <div className="h-64 relative min-h-[256px]">
                     {stats.expenseData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -1540,7 +1540,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               {expensesByCategory.length > 0 && (
                 <div className="card p-6 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-[24px] shadow-sm">
                   <h3 className="text-sm font-black text-stone-800 dark:text-white mb-4 uppercase tracking-widest">Phân bổ chi tiêu</h3>
-                  <div className="h-[300px] w-full">
+                  <div className="h-[300px] w-full min-h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
