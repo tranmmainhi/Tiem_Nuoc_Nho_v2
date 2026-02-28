@@ -240,6 +240,18 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   return (
     <div className="flex flex-col min-h-full pb-20">
       <div className="sticky top-0 z-30 bg-white/95 dark:bg-black/95 backdrop-blur-xl px-4 pt-3 pb-3 space-y-3 border-b border-stone-100/50 dark:border-stone-800/50 shadow-sm transition-colors">
+        {/* Loading Indicator */}
+        <AnimatePresence>
+          {(isLoading || isRefreshing) && menuItems.length > 0 && (
+            <motion.div 
+              initial={{ scaleX: 0, opacity: 0 }}
+              animate={{ scaleX: 1, opacity: 1 }}
+              exit={{ scaleX: 1, opacity: 0 }}
+              className="absolute top-0 left-0 right-0 h-0.5 bg-[#C9252C] origin-left z-50"
+            />
+          )}
+        </AnimatePresence>
+
         <div className="flex gap-2">
           <div className="relative flex-grow group">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none transition-colors group-focus-within:text-[#C9252C]">
@@ -483,7 +495,7 @@ const MenuItemCard: React.FC<{
     <motion.div 
       whileTap={{ scale: 0.98 }}
       onClick={() => item.isOutOfStock ? onOutOfStockClick() : onOpenModal()}
-      className={`group relative bg-white dark:bg-stone-900 rounded-2xl p-4 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60' : ''}`}
+      className={`group relative bg-white dark:bg-stone-900 rounded-2xl p-3 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60' : ''}`}
     >
       {item.isOutOfStock && (
         <div className="absolute inset-0 z-20 bg-white/50 dark:bg-black/50 backdrop-blur-[1px] flex items-center justify-center">
@@ -491,32 +503,21 @@ const MenuItemCard: React.FC<{
         </div>
       )}
 
-      <div className="flex justify-between items-start mb-2">
+      <div className="flex justify-between items-start mb-1.5">
         <div className="flex-1 pr-2">
           <h3 className="font-bold text-stone-800 dark:text-white text-sm leading-snug line-clamp-2 group-hover:text-[#C9252C] transition-colors flex items-center gap-1.5">
             {item.name}
-            {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
-              <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shrink-0" title={`Sắp hết hàng: Còn ${item.inventoryQty}`} />
-            )}
           </h3>
         </div>
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          className={`-mt-1 -mr-1 p-1.5 rounded-full transition-colors ${isFavorite ? 'text-[#C9252C]' : 'text-stone-300 dark:text-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-        >
-          <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-        </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2 items-center">
-        <p className="text-stone-400 dark:text-stone-500 text-[11px] font-medium uppercase tracking-wide line-clamp-1">
+      <div className="mb-3 flex flex-wrap gap-2 items-center">
+        <p className="text-stone-400 dark:text-stone-500 text-[10px] font-medium uppercase tracking-wide line-clamp-1">
           {item.category}
         </p>
         {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
-          <span className="text-[9px] font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded">
+          <span className="text-[9px] font-black text-orange-600 bg-orange-100 dark:bg-orange-900/40 px-1.5 py-0.5 rounded flex items-center gap-1">
+            <AlertCircle className="w-2.5 h-2.5" />
             Còn {item.inventoryQty}
           </span>
         )}
@@ -537,13 +538,13 @@ const MenuItemCard: React.FC<{
               onAddQuick(e);
             }
           }}
-          className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm tap-active transition-transform hover:scale-105 active:scale-95 ${
+          className={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm tap-active transition-transform hover:scale-105 active:scale-95 ${
             item.isOutOfStock 
               ? 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500' 
               : 'bg-[#C9252C] text-white shadow-red-200 dark:shadow-none'
           }`}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
         </button>
       </div>
     </motion.div>

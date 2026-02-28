@@ -13,7 +13,7 @@ interface StaffViewProps {
   appsScriptUrl: string;
 }
 
-type ViewMode = 'dashboard' | 'orders' | 'expenses' | 'inventory' | 'menu';
+type ViewMode = 'dashboard' | 'orders' | 'expenses' | 'inventory' | 'menu' | 'cash';
 type TimeRange = 'day' | 'week' | 'month' | 'year';
 
 const MATERIALS = [
@@ -647,6 +647,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               { id: 'menu', label: 'Menu', icon: MenuIcon },
               { id: 'expenses', label: 'Chi tiêu', icon: Wallet },
               { id: 'inventory', label: 'Nhập kho', icon: Package },
+              { id: 'cash', label: 'Sổ quỹ', icon: DollarSign },
             ].map((tab) => {
               const isActive = viewMode === tab.id;
               const Icon = tab.icon;
@@ -678,6 +679,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               if (viewMode === 'orders') fetchAllData(false);
               else if (viewMode === 'expenses') fetchTransactions();
               else if (viewMode === 'inventory') fetchInventory();
+              else if (viewMode === 'cash') { fetchAllData(false); fetchTransactions(); }
               else fetchAllData(false);
             }}
             disabled={isRefreshing}
@@ -746,6 +748,115 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
       <div className="p-6 space-y-6">
         <AnimatePresence mode="wait">
+          {viewMode === 'cash' && (
+            <motion.div
+              key="cash"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-5"
+            >
+              <div className="flex justify-between items-center px-1">
+                <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Sổ quỹ tiền mặt</h2>
+              </div>
+
+              {/* Cash Balance Card */}
+              <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-[32px] p-8 text-white shadow-xl shadow-emerald-100 dark:shadow-none relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                  <DollarSign className="w-32 h-32" />
+                </div>
+                <div className="relative z-10 space-y-2">
+                  <div className="flex items-center gap-2 opacity-80">
+                    <Wallet className="w-5 h-5" />
+                    <span className="text-xs font-black uppercase tracking-widest">Tiền mặt tại quán</span>
+                  </div>
+                  <p className="text-4xl font-black tracking-tight">
+                    {(
+                      orders.filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành')).reduce((sum, o) => sum + o.total, 0) +
+                      expenses.filter(e => (e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
+                      expenses.filter(e => e.phan_loai === 'Chi').reduce((sum, e) => sum + Number(e.so_tien), 0)
+                    ).toLocaleString()}đ
+                  </p>
+                  <div className="pt-4 flex gap-3">
+                    <button 
+                      onClick={() => {
+                        setExpenseType('Thu');
+                        setExpenseCat('Nạp tiền');
+                        setExpenseDesc('Nạp tiền đầu ca');
+                        setShowExpenseForm(true);
+                      }}
+                      className="flex-1 bg-white/20 backdrop-blur-md hover:bg-white/30 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <ArrowDownRight className="w-4 h-4" /> Nạp tiền
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setExpenseType('Chi');
+                        setExpenseCat('Rút tiền');
+                        setExpenseDesc('Rút tiền cuối ca');
+                        setShowExpenseForm(true);
+                      }}
+                      className="flex-1 bg-white/20 backdrop-blur-md hover:bg-white/30 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <ArrowUpRight className="w-4 h-4" /> Rút tiền
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Cash Movements */}
+              <div className="space-y-4">
+                <h3 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest px-1">Biến động gần đây</h3>
+                <div className="bg-white dark:bg-stone-900 rounded-[24px] border border-stone-100 dark:border-stone-800 overflow-hidden">
+                  {[
+                    ...orders
+                      .filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành'))
+                      .map(o => ({
+                        type: 'order',
+                        id: o.orderId,
+                        amount: o.total,
+                        desc: `Đơn hàng #${o.orderId}`,
+                        time: o.timestamp,
+                        isIn: true
+                      })),
+                    ...expenses.map(e => ({
+                      type: 'transaction',
+                      id: e.id_thu_chi,
+                      amount: Number(e.so_tien),
+                      desc: e.ghi_chu,
+                      time: e.thoi_gian,
+                      isIn: e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập'
+                    }))
+                  ]
+                  .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+                  .slice(0, 20)
+                  .map((item, idx) => (
+                    <div key={`${item.type}-${item.id}-${idx}`} className="p-4 border-b border-stone-50 dark:border-stone-800 last:border-0 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          item.type === 'order' 
+                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-500' 
+                            : item.isIn 
+                              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500'
+                              : 'bg-red-50 dark:bg-red-900/20 text-red-500'
+                        }`}>
+                          {item.type === 'order' ? <Coffee className="w-5 h-5" /> : (item.isIn ? <ArrowDownRight className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />)}
+                        </div>
+                        <div>
+                          <p className="font-bold text-stone-800 dark:text-white text-sm">{item.desc}</p>
+                          <p className="text-[10px] font-bold text-stone-400">{new Date(item.time).toLocaleString('vi-VN')}</p>
+                        </div>
+                      </div>
+                      <span className={`font-black ${item.isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {item.isIn ? '+' : '-'}{item.amount.toLocaleString()}đ
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {viewMode === 'dashboard' && (
             <motion.div
               key="dashboard"
