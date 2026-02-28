@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Minus, X, Check, Search, Heart, AlertCircle, RefreshCw, ChevronRight, ShoppingBag, Settings as SettingsIcon, Package } from 'lucide-react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
+import { Plus, Minus, X, Check, Search, Heart, AlertCircle, RefreshCw, ChevronRight, ShoppingBag, Settings as SettingsIcon, Package, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { VirtuosoGrid } from 'react-virtuoso';
+import { VirtuosoGrid, VirtuosoGridHandle } from 'react-virtuoso';
 import { MenuItem, CartItem } from '../types';
 import { useUI } from '../context/UIContext';
 import { useData } from '../context/DataContext';
@@ -22,6 +22,13 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   const { setIsFabHidden } = useUI();
   const { menuItems: rawMenuItems, isLoading, isRefreshing, error, fetchAllData, createOrder, lastUpdated } = useData();
   const { cart, addToCart } = useCart();
+  const virtuosoRef = React.useRef<VirtuosoGridHandle>(null);
+  const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (main) setScrollParent(main);
+  }, []);
 
   const [activeCategory, setActiveCategory] = useState('Tất cả');
   const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
@@ -37,6 +44,19 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   });
 
   const [timeAgo, setTimeAgo] = useState<string>('');
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (!main) return;
+
+    const handleScroll = () => {
+      setShowBackToTop(main.scrollTop > 400);
+    };
+
+    main.addEventListener('scroll', handleScroll);
+    return () => main.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const updateTimeAgo = () => {
@@ -176,7 +196,7 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   };
 
   // Virtualization components
-  const GridList = React.forwardRef(({ style, children, ...props }: any, ref: any) => (
+  const GridList = useMemo(() => React.forwardRef(({ style, children, ...props }: any, ref: any) => (
     <div
       ref={ref}
       {...props}
@@ -184,21 +204,23 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
         ...style,
         display: 'grid',
         gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: '0.5rem',
-        paddingLeft: '0.75rem',
-        paddingRight: '0.75rem',
+        gap: '0.75rem',
+        paddingTop: style?.paddingTop || '0.75rem',
+        paddingRight: style?.paddingRight || '0.75rem',
+        paddingBottom: style?.paddingBottom || '0.75rem',
+        paddingLeft: style?.paddingLeft || '0.75rem',
       }}
       className="sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
     >
       {children}
     </div>
-  ));
+  )), []);
 
-  const GridItem = ({ children, ...props }: any) => (
+  const GridItem = useMemo(() => ({ children, ...props }: any) => (
     <div {...props} className="h-full">
       {children}
     </div>
-  );
+  ), []);
 
   const handleAddToCart = (cartItem: CartItem, e?: React.MouseEvent) => {
     const currentQty = getCartQuantity(cartItem.id);
@@ -279,16 +301,16 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
               ))}
            </div>
         </div>
-        <div className="p-5 grid grid-cols-2 gap-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <div key={i} className="bg-white dark:bg-stone-900 rounded-2xl p-3 h-48 border border-stone-100 dark:border-stone-800 shadow-sm flex flex-col justify-between animate-pulse">
-              <div className="space-y-2">
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+            <div key={i} className="bg-white dark:bg-stone-900 rounded-2xl p-3 h-32 border border-stone-100 dark:border-stone-800 shadow-sm flex flex-col animate-pulse">
+              <div className="flex-1 space-y-2">
                 <div className="h-4 bg-stone-100 dark:bg-stone-800 rounded w-3/4" />
                 <div className="h-3 bg-stone-100 dark:bg-stone-800 rounded w-1/2" />
               </div>
-              <div className="flex justify-between items-end">
+              <div className="flex justify-between items-end mt-2">
                 <div className="h-5 bg-stone-100 dark:bg-stone-800 rounded w-1/3" />
-                <div className="h-7 w-7 bg-stone-100 dark:bg-stone-800 rounded-full" />
+                <div className="h-8 w-8 bg-stone-100 dark:bg-stone-800 rounded-lg" />
               </div>
             </div>
           ))}
@@ -412,44 +434,39 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
         </div>
       </div>
 
-      <div className="flex-grow">
+      <div className="flex-grow relative">
         {filteredItems.length > 0 ? (
           <VirtuosoGrid
-            customScrollParent={document.querySelector('main') || undefined}
+            ref={virtuosoRef}
+            customScrollParent={scrollParent || undefined}
             data={filteredItems}
             components={{
               List: GridList,
               Item: GridItem,
             }}
             itemContent={(index, item) => (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                className="h-full"
-              >
-                <MenuItemCard 
-                  item={item} 
-                  onOpenModal={() => {
-                    if (item.hasCustomizations === false) {
-                      performAddDirectly(item);
-                    } else {
-                      setSelectedItem(item);
-                    }
-                  }} 
-                  onAddQuick={(e) => {
-                    if (item.hasCustomizations === false) {
-                      performAddDirectly(item, undefined, e.clientX, e.clientY);
-                    } else {
-                      setSelectedItem(item);
-                    }
-                  }}
-                  onOutOfStockClick={() => setOutOfStockItem(item)}
-                  isAnimating={animatingItemId === item.id}
-                  isFavorite={favorites.includes(item.id)}
-                  onToggleFavorite={() => toggleFavorite(item.id)}
-                />
-              </motion.div>
+              <MenuItemCard 
+                key={item.id}
+                item={item} 
+                onOpenModal={() => {
+                  if (item.hasCustomizations === false) {
+                    performAddDirectly(item);
+                  } else {
+                    setSelectedItem(item);
+                  }
+                }} 
+                onAddQuick={(e) => {
+                  if (item.hasCustomizations === false) {
+                    performAddDirectly(item, undefined, e.clientX, e.clientY);
+                  } else {
+                    setSelectedItem(item);
+                  }
+                }}
+                onOutOfStockClick={() => setOutOfStockItem(item)}
+                isAnimating={animatingItemId === item.id}
+                isFavorite={favorites.includes(item.id)}
+                onToggleFavorite={() => toggleFavorite(item.id)}
+              />
             )}
           />
         ) : (
@@ -461,6 +478,23 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
             <p className="text-stone-400 dark:text-stone-500 font-medium text-sm max-w-[200px]">Thử tìm từ khóa khác hoặc chọn danh mục khác xem sao</p>
           </div>
         )}
+
+        <AnimatePresence>
+          {showBackToTop && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.5, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.5, y: 20 }}
+              onClick={() => {
+                const main = document.querySelector('main');
+                if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="fixed bottom-32 left-6 z-50 w-12 h-12 bg-white dark:bg-stone-900 text-stone-800 dark:text-white rounded-full shadow-xl border border-stone-100 dark:border-stone-800 flex items-center justify-center tap-active hover:scale-110 transition-transform"
+            >
+              <ArrowUp className="w-6 h-6" />
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>
@@ -588,7 +622,15 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   );
 }
 
-const MenuItemCard: React.FC<{ 
+const MenuItemCard = memo(({ 
+  item, 
+  onOpenModal, 
+  onAddQuick, 
+  onOutOfStockClick, 
+  isAnimating, 
+  isFavorite, 
+  onToggleFavorite 
+}: { 
   item: MenuItem; 
   onOpenModal: () => void; 
   onAddQuick: (e: React.MouseEvent) => void;
@@ -596,12 +638,14 @@ const MenuItemCard: React.FC<{
   isAnimating: boolean;
   isFavorite: boolean;
   onToggleFavorite: () => void;
-}> = ({ item, onOpenModal, onAddQuick, onOutOfStockClick, isAnimating, isFavorite, onToggleFavorite }) => {
+}) => {
   return (
     <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
       whileTap={{ scale: 0.98 }}
       onClick={() => item.isOutOfStock ? onOutOfStockClick() : onOpenModal()}
-      className={`group relative bg-white dark:bg-stone-900 rounded-xl p-2.5 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60' : ''}`}
+      className={`group relative bg-white dark:bg-stone-900 rounded-xl p-3 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60' : ''}`}
     >
       {item.isOutOfStock && (
         <div className="absolute inset-0 z-20 bg-white/50 dark:bg-black/50 backdrop-blur-[1px] flex items-center justify-center">
@@ -609,8 +653,23 @@ const MenuItemCard: React.FC<{
         </div>
       )}
 
+      {/* Favorite Button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite();
+        }}
+        className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-md transition-all z-10 ${
+          isFavorite 
+            ? 'bg-red-500 text-white shadow-lg' 
+            : 'bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 hover:text-red-500'
+        }`}
+      >
+        <Heart className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
+      </button>
+
       <div className="flex flex-col h-full">
-        <div className="flex-1 mb-1.5">
+        <div className="flex-1 mb-2">
           <div className="flex justify-between items-start gap-1">
             <h3 className="font-bold text-stone-800 dark:text-white text-[13px] leading-tight line-clamp-2 group-hover:text-[#C9252C] transition-colors">
               {item.name}
@@ -621,12 +680,12 @@ const MenuItemCard: React.FC<{
               </span>
             )}
           </div>
-          <p className="text-stone-400 dark:text-stone-500 text-[9px] font-bold uppercase tracking-wider mt-0.5">
+          <p className="text-stone-400 dark:text-stone-500 text-[9px] font-bold uppercase tracking-wider mt-1">
             {item.category}
           </p>
         </div>
 
-        <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-stone-50 dark:border-stone-800/50">
+        <div className="flex items-center justify-between mt-auto pt-2 border-t border-stone-50 dark:border-stone-800/50">
           <p className="text-[#C9252C] font-black text-[13px]">
             {item.price.toLocaleString('vi-VN')}
             <span className="text-[8px] align-top ml-0.5">đ</span>
@@ -653,7 +712,7 @@ const MenuItemCard: React.FC<{
       </div>
     </motion.div>
   );
-};
+});
 
 const CustomizationModal: React.FC<{ item: MenuItem; currentQty: number; onClose: () => void; onAdd: (item: CartItem, e: React.MouseEvent) => void; showToast: (msg: string) => void }> = ({ item, currentQty, onClose, onAdd, showToast }) => {
   const [quantity, setQuantity] = useState(1);
