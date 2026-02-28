@@ -27,6 +27,8 @@ interface DataContextType {
   error: string | null;
   refreshInterval: number;
   autoSyncEnabled: boolean;
+  lastUpdated: Date | null;
+  isOnline: boolean;
   setAutoSyncEnabled: (enabled: boolean) => void;
   setRefreshInterval: (interval: number) => void;
   fetchAllData: (showFullLoader?: boolean) => Promise<void>;
@@ -43,6 +45,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
   const [refreshInterval, setRefreshIntervalState] = useState(() => {
     const saved = localStorage.getItem('refreshInterval');
     return saved ? Math.max(15, Number(saved)) : 30;
@@ -100,16 +104,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         ? ordersJson.data
         : (Array.isArray(ordersJson) ? ordersJson : []);
 
-      // Deduplicate Orders
+      // Map and Deduplicate Orders
       const uniqueOrdersMap = new Map();
       if (Array.isArray(ordersData)) {
         ordersData.forEach((order: any) => {
-          if (order.orderId) {
-            uniqueOrdersMap.set(order.orderId, order);
+          const id = order.orderId || order.ma_don || order.id;
+          if (id) {
+            // Map raw API fields to OrderData interface
+            const mappedOrder: OrderData = {
+              orderId: String(id),
+              customerName: order.customerName || order.ten_khach_hang || 'Khách hàng',
+              phoneNumber: order.phoneNumber || order.so_dien_thoai || '',
+              tableNumber: order.tableNumber || order.so_ban || '',
+              items: Array.isArray(order.items) ? order.items : [],
+              total: Number(order.total || order.tong_tien || 0),
+              timestamp: order.timestamp || order.thoi_gian || new Date().toISOString(),
+              notes: order.notes || order.ghi_chu || '',
+              paymentMethod: order.paymentMethod || order.thanh_toan || 'Tiền mặt',
+              orderStatus: order.orderStatus || order.trang_thai || 'Chờ xử lý',
+              paymentStatus: order.paymentStatus || (order.thanh_toan === 'Chuyển khoản' ? 'Đã thanh toán' : 'Chưa thanh toán'),
+            };
+            uniqueOrdersMap.set(mappedOrder.orderId, mappedOrder);
           }
         });
       }
-      const uniqueOrders = Array.from(uniqueOrdersMap.values());
+      const uniqueOrders = Array.from(uniqueOrdersMap.values()) as OrderData[];
 
       // Try to fetch inventory, but don't block if it fails
       let inventoryData = [];
@@ -197,7 +216,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         mappedMenu.forEach(item => {
           if (item.id) uniqueMenuMap.set(item.id, item);
         });
-        setMenuItems(Array.from(uniqueMenuMap.values()));
+        const finalMenu = Array.from(uniqueMenuMap.values()) as MenuItem[];
+        
+        // Detect items that just went out of stock
+        if (menuItems.length > 0) {
+          finalMenu.forEach(newItem => {
+            const oldItem = menuItems.find(i => i.id === newItem.id);
+            if (oldItem && !oldItem.isOutOfStock && newItem.isOutOfStock) {
+              // Trigger a custom event for components to listen to
+              window.dispatchEvent(new CustomEvent('itemOutOfStock', { detail: newItem }));
+            }
+          });
+        }
+
+        setMenuItems(finalMenu);
       }
 
       if (uniqueOrders.length > 0) {
@@ -206,9 +238,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         setOrders(ordersData);
       }
 
+      setLastUpdated(new Date());
+      setIsOnline(true);
       lastFetchTimeRef.current = Date.now();
     } catch (err: any) {
       console.error('Data fetch error:', err);
+      setIsOnline(false);
       if (err.message?.includes('Rate exceeded')) {
         setError('Hệ thống đang bận. Vui lòng đợi...');
       } else if (err.message?.includes('Failed to fetch')) {
@@ -302,6 +337,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       error, 
       refreshInterval, 
       autoSyncEnabled,
+      lastUpdated,
+      isOnline,
       setAutoSyncEnabled,
       setRefreshInterval, 
       fetchAllData,

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Search, RefreshCw, AlertCircle, Check, ChevronRight, Package, Settings as SettingsIcon, Filter, MoreVertical, Power } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Search, RefreshCw, AlertCircle, Check, ChevronRight, Package, Settings as SettingsIcon, Filter, MoreVertical, Power, TrendingUp, Calendar as CalendarIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Solar, Lunar } from 'lunar-javascript';
+import { GoogleGenAI } from "@google/genai";
 import { useData } from '../context/DataContext';
 
 interface MenuManagerProps {
@@ -18,11 +20,39 @@ interface MenuItem {
 }
 
 export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
-  const { menuItems: rawMenuItems, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData } = useData();
+  const { menuItems: rawMenuItems, orders, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, lastUpdated } = useData();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Tất cả');
+  const [forecastDays, setForecastDays] = useState<7 | 14 | 30>(7);
+  const [showForecast, setShowForecast] = useState(false);
+  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+  const [isGeneratingSeasonal, setIsGeneratingSeasonal] = useState(false);
+  const [purchaseOrder, setPurchaseOrder] = useState<any[] | null>(null);
+  const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
+  const [inventoryValue, setInventoryValue] = useState<number>(0);
+  const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
+
+  const [timeAgo, setTimeAgo] = useState<string>('');
+
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (!lastUpdated) {
+        setTimeAgo('');
+        return;
+      }
+      const seconds = Math.floor((new Date().getTime() - lastUpdated.getTime()) / 1000);
+      if (seconds < 60) setTimeAgo('Vừa xong');
+      else if (seconds < 3600) setTimeAgo(`${Math.floor(seconds / 60)} phút trước`);
+      else setTimeAgo(`${Math.floor(seconds / 3600)} giờ trước`);
+    };
+
+    updateTimeAgo();
+    const interval = setInterval(updateTimeAgo, 30000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   // Map rawMenuItems to local MenuItem format
   const menuItems = useMemo(() => {
@@ -45,7 +75,8 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
     gia_ban: 0,
     danh_muc: '',
     co_san: true,
-    has_customizations: false
+    has_customizations: false,
+    inventoryQty: 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -58,7 +89,7 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
   const existingCategories = useMemo(() => {
     const cats = Array.from(new Set(menuItems.map(i => i.danh_muc)))
       .filter(Boolean)
-      .filter(cat => cat !== 'Tất cả');
+      .filter(cat => cat.trim().toLowerCase() !== 'tất cả');
     return cats.sort();
   }, [menuItems]);
 
@@ -81,6 +112,147 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
     return items;
   }, [menuItems, searchQuery, activeCategory]);
 
+  // Inventory Forecast Logic
+  const inventoryForecast = useMemo(() => {
+    const now = new Date();
+    const startTime = new Date(now.getTime() - forecastDays * 24 * 60 * 60 * 1000);
+    
+    // Filter orders in the selected period
+    const periodOrders = orders.filter(o => new Date(o.timestamp) >= startTime && o.orderStatus === 'Hoàn thành');
+    
+    // Calculate consumption per item
+    const consumptionMap: Record<string, number> = {};
+    periodOrders.forEach(order => {
+      order.items.forEach(item => {
+        consumptionMap[item.name] = (consumptionMap[item.name] || 0) + item.quantity;
+      });
+    });
+
+    // Forecast for each menu item
+    return menuItems
+      .filter(item => item.inventoryQty !== undefined)
+      .map(item => {
+        const consumptionInPeriod = consumptionMap[item.ten_mon] || 0;
+        const dailyConsumption = consumptionInPeriod / forecastDays;
+        
+        // Predicted days until out of stock
+        const daysLeft = dailyConsumption > 0 ? (item.inventoryQty || 0) / dailyConsumption : Infinity;
+        
+        // Suggested restock for the NEXT period of the same length
+        const suggestedRestock = Math.max(0, Math.ceil(dailyConsumption * forecastDays) - (item.inventoryQty || 0));
+
+        return {
+          ...item,
+          dailyConsumption,
+          daysLeft,
+          suggestedRestock,
+          predictedOutOfStockDate: daysLeft === Infinity ? null : new Date(now.getTime() + daysLeft * 24 * 60 * 60 * 1000)
+        };
+      })
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+  }, [menuItems, orders, forecastDays]);
+
+  const generateAIInsights = async () => {
+    if (isGeneratingInsights) return;
+    setIsGeneratingInsights(true);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      
+      // Prepare data for AI
+      const salesData = inventoryForecast.map(item => ({
+        name: item.ten_mon,
+        dailySales: item.dailyConsumption.toFixed(2),
+        stock: item.inventoryQty,
+        daysLeft: item.daysLeft === Infinity ? 'N/A' : Math.ceil(item.daysLeft)
+      }));
+
+      const prompt = `Dựa trên dữ liệu bán hàng 7 ngày qua: ${JSON.stringify(salesData)}. 
+      Hãy phân tích xu hướng:
+      1. Món nào đang "hot" (tăng trưởng nhanh)?
+      2. Món nào cần nhập hàng gấp hơn dự kiến?
+      3. Gợi ý chiến lược tồn kho ngắn hạn.
+      Trả về kết quả bằng tiếng Việt, ngắn gọn, súc tích, định dạng Markdown.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
+
+      setAiInsights(response.text || "Không thể tạo phân tích lúc này.");
+    } catch (err) {
+      console.error("AI Insights Error:", err);
+      setAiInsights("Lỗi khi kết nối với AI.");
+    } finally {
+      setIsGeneratingInsights(false);
+    }
+  };
+
+  const generateSeasonalAnalysis = async () => {
+    if (isGeneratingSeasonal) return;
+    setIsGeneratingSeasonal(true);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      
+      // Prepare long-term data (last 90 days)
+      const now = new Date();
+      const solar = Solar.fromDate(now);
+      const lunar = solar.getLunar();
+      const lunarDateStr = `Ngày ${lunar.getDay()} tháng ${lunar.getMonth()} năm ${lunar.getYear()} (Âm lịch)`;
+      const lunarLeStr = lunar.getFestivals().join(', ') || 'Không có lễ hội âm lịch';
+
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const longTermOrders = orders.filter(o => new Date(o.timestamp) >= ninetyDaysAgo && o.orderStatus === 'Hoàn thành');
+      
+      const monthlySales: Record<string, Record<string, number>> = {};
+      longTermOrders.forEach(order => {
+        const month = new Date(order.timestamp).toLocaleString('vi-VN', { month: 'long' });
+        if (!monthlySales[month]) monthlySales[month] = {};
+        order.items.forEach(item => {
+          monthlySales[month][item.name] = (monthlySales[month][item.name] || 0) + item.quantity;
+        });
+      });
+
+      const prompt = `Dựa trên dữ liệu bán hàng 90 ngày qua: ${JSON.stringify(monthlySales)}. 
+      Hôm nay là ngày ${now.toLocaleDateString('vi-VN')}.
+      Thông tin lịch âm Việt Nam: ${lunarDateStr}. Các lễ hội âm lịch hôm nay: ${lunarLeStr}.
+      Hãy phân tích mùa vụ và dự báo cho các dịp đặc biệt, ĐẶC BIỆT lưu ý các ngày lễ tết theo LỊCH ÂM của Việt Nam (như Tết Nguyên Đán, Rằm tháng Giêng, Giỗ tổ Hùng Vương, Giải phóng miền Nam 30/4, Quốc tế lao động 1/5, Rằm tháng Bảy, Trung Thu, v.v.) trong năm 2026:
+      1. Xu hướng thay đổi theo tháng và theo các dịp lễ tết âm/dương lịch sắp tới?
+      2. Dự báo nhu cầu cho các ngày lễ/sự kiện sắp tới dựa trên lịch sử và đặc thù văn hóa Việt Nam (sử dụng thông tin lịch âm đã cung cấp).
+      3. Gợi ý các món nên đẩy mạnh hoặc chuẩn bị nguyên liệu sớm (ví dụ: món giải nhiệt mùa hè, món ấm nóng mùa đông, món quà tặng dịp lễ).
+      Trả về kết quả bằng tiếng Việt, chuyên nghiệp, định dạng Markdown.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
+
+      setAiInsights(response.text || "Không thể tạo phân tích mùa vụ.");
+    } catch (err) {
+      console.error("Seasonal Analysis Error:", err);
+      setAiInsights("Lỗi khi kết nối với AI để phân tích mùa vụ.");
+    } finally {
+      setIsGeneratingSeasonal(false);
+    }
+  };
+
+  const createPurchaseOrder = () => {
+    const itemsToRestock = inventoryForecast.filter(item => item.suggestedRestock > 0);
+    if (itemsToRestock.length === 0) {
+      alert("Tất cả mặt hàng đều đủ tồn kho!");
+      return;
+    }
+    setPurchaseOrder(itemsToRestock);
+    alert(`Đã tạo đơn nhập hàng dự kiến với ${itemsToRestock.length} mặt hàng. Bạn có thể kiểm tra trong phần Chi tiết đơn nhập.`);
+  };
+
+  useEffect(() => {
+    if (showForecast && !aiInsights && orders.length > 0) {
+      generateAIInsights();
+    }
+  }, [showForecast, orders.length]);
+
   // 2. Add Flow
   const handleAddNew = () => {
     setEditingItem(null);
@@ -90,7 +262,8 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
       gia_ban: 0,
       danh_muc: existingCategories[0] || 'Cà phê',
       co_san: true,
-      has_customizations: false
+      has_customizations: false,
+      inventoryQty: 0
     });
     setIsModalOpen(true);
   };
@@ -130,9 +303,6 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
   // Quick Toggle Availability
   const handleToggleAvailability = async (item: MenuItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    // Optimistic update
-    // Note: In a real app we'd update local state immediately. 
-    // Here we rely on the API call then refresh.
     
     try {
       const payload = {
@@ -141,8 +311,9 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
         ten_mon: item.ten_mon,
         gia_ban: item.gia_ban,
         danh_muc: item.danh_muc,
-        co_san: !item.co_san, // Toggle
-        has_customizations: item.has_customizations
+        co_san: !item.co_san,
+        has_customizations: item.has_customizations,
+        inventoryQty: item.inventoryQty
       };
 
       const response = await fetch(appsScriptUrl, {
@@ -153,10 +324,48 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
       
       const result = await response.json();
       if (result.status === 'success') {
-        await fetchAllData(); // Refresh list
+        await fetchAllData();
       }
     } catch (err) {
       console.error("Failed to toggle availability", err);
+    }
+  };
+
+  const handleInventorySave = async (ma_mon: string) => {
+    setIsUpdatingInventory(true);
+    try {
+      const item = menuItems.find(i => i.ma_mon === ma_mon);
+      if (!item) return;
+
+      const payload = {
+        action: 'editMenuItem',
+        ma_mon: item.ma_mon,
+        ten_mon: item.ten_mon,
+        gia_ban: item.gia_ban,
+        danh_muc: item.danh_muc,
+        co_san: item.co_san,
+        has_customizations: item.has_customizations,
+        inventoryQty: inventoryValue
+      };
+
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      });
+      
+      const result = await response.json();
+      if (result.status === 'success') {
+        setEditingInventoryId(null);
+        await fetchAllData();
+      } else {
+        alert('Lỗi: ' + (result.message || 'Không thể cập nhật tồn kho'));
+      }
+    } catch (err) {
+      console.error("Failed to update inventory", err);
+      alert('Lỗi kết nối khi cập nhật tồn kho');
+    } finally {
+      setIsUpdatingInventory(false);
     }
   };
 
@@ -182,7 +391,8 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
         gia_ban: Number(formData.gia_ban),
         danh_muc: finalCategory,
         co_san: formData.co_san,
-        has_customizations: formData.has_customizations
+        has_customizations: formData.has_customizations,
+        inventoryQty: Number(formData.inventoryQty || 0)
       };
 
       const response = await fetch(appsScriptUrl, {
@@ -218,12 +428,30 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={() => fetchAllData()}
-            disabled={isLoading || isRefreshing}
-            className="w-10 h-10 bg-white dark:bg-stone-900 rounded-xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+            onClick={() => setShowForecast(!showForecast)}
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all tap-active shadow-sm ${
+              showForecast 
+                ? 'bg-emerald-500 text-white border-emerald-500' 
+                : 'bg-white dark:bg-stone-900 border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+            }`}
+            title="Dự báo tồn kho"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading || isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
+            <TrendingUp className="w-4 h-4" />
           </button>
+          <div className="flex flex-col items-center">
+            <button 
+              onClick={() => fetchAllData()}
+              disabled={isLoading || isRefreshing}
+              className="w-10 h-10 bg-white dark:bg-stone-900 rounded-xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading || isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
+            </button>
+            {timeAgo && (
+              <span className="text-[8px] font-bold text-stone-400 dark:text-stone-500 mt-1 whitespace-nowrap">
+                {timeAgo}
+              </span>
+            )}
+          </div>
           <button 
             onClick={handleAddNew}
             className="bg-[#C9252C] text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-red-100 dark:shadow-none tap-active hover:bg-[#a01d23] transition-colors"
@@ -235,26 +463,205 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
         </div>
       </div>
 
+      {/* Forecast Section */}
+      <AnimatePresence>
+        {showForecast && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-white dark:bg-stone-900 border-b border-stone-100 dark:border-stone-800 overflow-hidden"
+          >
+            <div className="p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-black text-stone-800 dark:text-white uppercase tracking-tight">Dự báo nhập hàng thông minh</h3>
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Phân tích dựa trên dữ liệu bán hàng thực tế</p>
+                </div>
+                <div className="flex bg-stone-100 dark:bg-stone-800 p-1 rounded-xl border border-stone-200 dark:border-stone-700">
+                  {[7, 14, 30].map(days => (
+                    <button
+                      key={days}
+                      onClick={() => setForecastDays(days as any)}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                        forecastDays === days
+                          ? 'bg-white dark:bg-stone-700 text-stone-800 dark:text-white shadow-sm'
+                          : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'
+                      }`}
+                    >
+                      {days} ngày
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {inventoryForecast.slice(0, 6).map((item, idx) => (
+                  <div key={`forecast-item-${idx}`} className="bg-stone-50 dark:bg-stone-800/50 p-4 rounded-2xl border border-stone-100 dark:border-stone-700/50 flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-grow">
+                        <h4 className="font-bold text-stone-800 dark:text-white text-sm leading-tight line-clamp-1">{item.ten_mon}</h4>
+                        <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mt-0.5">{item.danh_muc}</p>
+                      </div>
+                      {item.daysLeft <= 3 && (
+                        <span className="bg-red-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md animate-pulse">Sắp hết</span>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-stone-400 uppercase tracking-widest">Tồn kho hiện tại:</span>
+                        <span className="text-stone-800 dark:text-white">{item.inventoryQty} món</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-stone-400 uppercase tracking-widest">Tiêu thụ trung bình:</span>
+                        <span className="text-stone-800 dark:text-white">{item.dailyConsumption.toFixed(1)} món/ngày</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-stone-400 uppercase tracking-widest">Dự kiến hết hàng:</span>
+                        <span className={`${item.daysLeft <= 3 ? 'text-red-500' : 'text-emerald-500'}`}>
+                          {item.daysLeft === Infinity ? 'Không xác định' : 
+                           item.daysLeft < 1 ? 'Hôm nay' : 
+                           `Sau ${Math.ceil(item.daysLeft)} ngày`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-700 flex justify-between items-center">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-stone-400 uppercase tracking-widest">Gợi ý nhập thêm</span>
+                        <span className={`text-sm font-black ${item.suggestedRestock > 0 ? 'text-[#C9252C]' : 'text-emerald-600'}`}>
+                          {item.suggestedRestock > 0 ? `+${item.suggestedRestock} món` : 'Đã đủ hàng'}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => handleEdit(item)}
+                        className="w-8 h-8 bg-white dark:bg-stone-700 rounded-lg flex items-center justify-center text-stone-400 hover:text-stone-800 dark:hover:text-white shadow-sm border border-stone-100 dark:border-stone-600 transition-all"
+                      >
+                        <CalendarIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {inventoryForecast.length > 6 && (
+                <p className="text-center text-[10px] font-bold text-stone-400 uppercase tracking-widest">Xem thêm trong báo cáo chi tiết</p>
+              )}
+
+              {/* AI Insights Section */}
+              <div className="mt-8 p-6 bg-stone-50 dark:bg-stone-800/30 rounded-3xl border border-stone-100 dark:border-stone-700/50">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white shadow-lg shadow-emerald-100 dark:shadow-none">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-black text-stone-800 dark:text-white uppercase tracking-widest">Phân tích xu hướng AI</h4>
+                  </div>
+                  <button 
+                    onClick={generateAIInsights}
+                    disabled={isGeneratingInsights}
+                    className="text-[10px] font-black text-[#C9252C] uppercase tracking-widest tap-active disabled:opacity-50"
+                  >
+                    {isGeneratingInsights ? 'Đang phân tích...' : 'Làm mới phân tích'}
+                  </button>
+                </div>
+
+                <div className="flex gap-2 mb-4">
+                  <button 
+                    onClick={generateSeasonalAnalysis}
+                    disabled={isGeneratingSeasonal}
+                    className="flex-1 py-2 bg-stone-100 dark:bg-stone-700 rounded-xl text-[10px] font-black uppercase tracking-widest text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isGeneratingSeasonal ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CalendarIcon className="w-3 h-3" />}
+                    Phân tích mùa vụ
+                  </button>
+                  <button 
+                    onClick={createPurchaseOrder}
+                    className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Package className="w-3 h-3" />
+                    Tạo đơn nhập hàng
+                  </button>
+                </div>
+                
+                {aiInsights ? (
+                  <div className="prose prose-stone dark:prose-invert prose-xs max-w-none">
+                    <div className="text-[11px] leading-relaxed text-stone-600 dark:text-stone-400 font-medium whitespace-pre-wrap">
+                      {aiInsights}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-stone-400">
+                    <RefreshCw className={`w-6 h-6 mb-2 ${isGeneratingInsights ? 'animate-spin' : ''}`} />
+                    <p className="text-[10px] font-bold uppercase tracking-widest">
+                      {isGeneratingInsights ? 'AI đang xử lý dữ liệu...' : 'Nhấn làm mới để bắt đầu phân tích'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Purchase Order Details */}
+              <AnimatePresence>
+                {purchaseOrder && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    className="mt-6 p-6 bg-emerald-50 dark:bg-emerald-900/10 rounded-3xl border border-emerald-100 dark:border-emerald-900/30"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest">Đơn nhập hàng dự kiến (Draft)</h4>
+                      <button onClick={() => setPurchaseOrder(null)} className="text-emerald-400 hover:text-emerald-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {purchaseOrder.map((item, idx) => (
+                        <div key={`po-item-${idx}`} className="flex justify-between items-center text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                          <span>{item.ten_mon}</span>
+                          <span className="bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded-lg">+{item.suggestedRestock} món</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6 flex gap-3">
+                      <button className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none">
+                        Gửi nhà cung cấp
+                      </button>
+                      <button className="flex-1 py-3 bg-white dark:bg-stone-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-xl font-black text-[10px] uppercase tracking-widest">
+                        Lưu nháp
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Search & Filter */}
-      <div className="px-6 py-4 bg-white dark:bg-stone-900 border-b border-stone-100 dark:border-stone-800 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+      <div className="px-4 py-2 bg-white dark:bg-stone-900 border-b border-stone-100 dark:border-stone-800 space-y-2">
+        <div className="relative group">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400 group-focus-within:text-[#C9252C] transition-colors">
+            <Search className="w-3.5 h-3.5" />
+          </div>
           <input 
             type="text"
             placeholder="Tìm theo tên hoặc mã món..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-stone-50 dark:bg-stone-800 rounded-xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#C9252C]/20 border-none transition-all"
+            className="w-full pl-9 pr-3 py-2 bg-stone-50 dark:bg-stone-800 rounded-lg font-bold text-xs focus:outline-none focus:ring-2 focus:ring-[#C9252C]/20 border-none transition-all"
           />
         </div>
         
         {/* Category Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-6 px-6">
-          {['Tất cả', ...existingCategories].map(cat => (
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide -mx-4 px-4">
+          {['Tất cả', ...existingCategories].map((cat, index) => (
             <button
-              key={cat}
+              key={`cat-tab-${cat}-${index}`}
               onClick={() => setActiveCategory(cat)}
-              className={`px-4 py-2 rounded-xl whitespace-nowrap text-[11px] font-black uppercase tracking-wide transition-all tap-active border ${
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap text-[9px] font-black uppercase tracking-wide transition-all tap-active border ${
                 activeCategory === cat
                   ? 'bg-stone-800 dark:bg-white text-white dark:text-black border-stone-800 dark:border-white'
                   : 'bg-white dark:bg-stone-900 text-stone-400 dark:text-stone-500 border-stone-100 dark:border-stone-800'
@@ -321,47 +728,88 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                   </div>
 
                   {/* Main Info */}
-                  <div className="mb-4">
+                  <div className="mb-3">
                     <div className="flex justify-between items-start">
-                      <h4 className="font-black text-stone-800 dark:text-white text-lg leading-tight line-clamp-2 mb-1 group-hover:text-[#C9252C] transition-colors">
+                      <h4 className="font-black text-stone-800 dark:text-white text-base leading-tight line-clamp-2 mb-1 group-hover:text-[#C9252C] transition-colors">
                         {item.ten_mon}
                       </h4>
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <p className="text-xl font-black text-[#C9252C]">{item.gia_ban.toLocaleString()}đ</p>
-                      <span className="text-[10px] font-mono text-stone-400 dark:text-stone-600 bg-stone-50 dark:bg-stone-800 px-1.5 rounded">
+                      <p className="text-lg font-black text-[#C9252C]">{item.gia_ban.toLocaleString()}đ</p>
+                      <span className="text-[9px] font-mono text-stone-400 dark:text-stone-600 bg-stone-50 dark:bg-stone-800 px-1.5 rounded">
                         {item.ma_mon}
                       </span>
                     </div>
-                    <p className="text-xs font-bold text-stone-400 dark:text-stone-500 mt-1">{item.danh_muc}</p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-stone-400 dark:text-stone-500">{item.danh_muc}</p>
+                      {item.inventoryQty !== undefined && (
+                        <div className="flex items-center gap-1">
+                          {editingInventoryId === item.ma_mon ? (
+                            <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800 p-0.5 rounded-lg border border-stone-200 dark:border-stone-700">
+                              <input 
+                                type="number"
+                                autoFocus
+                                value={inventoryValue}
+                                onChange={(e) => setInventoryValue(Number(e.target.value))}
+                                className="w-10 bg-transparent text-[10px] font-black text-stone-800 dark:text-white border-none focus:ring-0 p-0 text-center"
+                              />
+                              <button 
+                                onClick={() => handleInventorySave(item.ma_mon)}
+                                disabled={isUpdatingInventory}
+                                className="p-1 bg-emerald-500 text-white rounded-md tap-active disabled:opacity-50"
+                              >
+                                {isUpdatingInventory ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Check className="w-2.5 h-2.5" />}
+                              </button>
+                              <button 
+                                onClick={() => setEditingInventoryId(null)}
+                                className="p-1 bg-stone-200 dark:bg-stone-700 text-stone-500 rounded-md tap-active"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => {
+                                setEditingInventoryId(item.ma_mon);
+                                setInventoryValue(item.inventoryQty || 0);
+                              }}
+                              className="text-[10px] font-black text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors flex items-center gap-1"
+                            >
+                              Kho: {item.inventoryQty}
+                              <Edit2 className="w-2 h-2 opacity-50" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-between pt-4 border-t border-stone-50 dark:border-stone-800">
+                  <div className="flex items-center justify-between pt-3 border-t border-stone-50 dark:border-stone-800">
                     <button
                       onClick={(e) => handleToggleAvailability(item, e)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors ${
                         item.co_san 
                           ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400' 
                           : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400'
                       }`}
                     >
-                      <Power className="w-3 h-3" />
+                      <Power className="w-2.5 h-2.5" />
                       {item.co_san ? 'Tắt' : 'Bật'}
                     </button>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5">
                       <button 
                         onClick={() => handleEdit(item)}
-                        className="w-9 h-9 bg-stone-50 dark:bg-stone-800 rounded-xl text-stone-500 hover:text-stone-800 dark:hover:text-white flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700"
+                        className="w-8 h-8 bg-stone-50 dark:bg-stone-800 rounded-lg text-stone-500 hover:text-stone-800 dark:hover:text-white flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button 
                         onClick={() => handleDelete(item.ma_mon)}
-                        className="w-9 h-9 bg-stone-50 dark:bg-stone-800 rounded-xl text-stone-400 hover:text-red-500 flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700 hover:border-red-200 dark:hover:border-red-900/50"
+                        className="w-8 h-8 bg-stone-50 dark:bg-stone-800 rounded-lg text-stone-400 hover:text-red-500 flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700 hover:border-red-200 dark:hover:border-red-900/50"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -442,6 +890,17 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                     placeholder="0"
                   />
                   <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 italic ml-1">* Nhập 25 sẽ tự động chuyển thành 25.000đ</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số lượng tồn kho</label>
+                  <input 
+                    type="number" 
+                    value={formData.inventoryQty}
+                    onChange={e => setFormData({...formData, inventoryQty: Number(e.target.value)})}
+                    className="w-full p-4 bg-stone-50 dark:bg-stone-800 rounded-xl font-bold text-stone-800 dark:text-white border-none focus:ring-2 focus:ring-[#C9252C]/20 transition-all placeholder:font-medium"
+                    placeholder="0"
+                  />
                 </div>
 
                 <div className="space-y-2">

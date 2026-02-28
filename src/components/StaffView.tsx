@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, CheckCircle2, Clock, XCircle, Coffee, DollarSign, AlertCircle, ChevronRight, Settings as SettingsIcon, Volume2, VolumeX, Package, User, MapPin, BarChart3, TrendingUp, TrendingDown, Plus, Trash2, Calendar, LayoutDashboard, ListOrdered, Wallet, Filter, ArrowUpRight, ArrowDownRight, Menu as MenuIcon } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Clock, XCircle, Coffee, DollarSign, AlertCircle, ChevronRight, Settings as SettingsIcon, Volume2, VolumeX, Package, User, MapPin, BarChart3, TrendingUp, TrendingDown, Plus, Trash2, Calendar, LayoutDashboard, ListOrdered, Wallet, Filter, ArrowUpRight, ArrowDownRight, Menu as MenuIcon, Share2, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 import { OrderData, Expense } from '../types';
 import { Link } from 'react-router-dom';
 import { useUI } from '../context/UIContext';
 import { useData } from '../context/DataContext';
+import { Invoice } from './Invoice';
 
 import { MenuManager } from './MenuManager';
 
@@ -36,7 +37,7 @@ const MATERIALS = [
 
 export function StaffView({ appsScriptUrl }: StaffViewProps) {
   const { setIsFabHidden } = useUI();
-  const { orders, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, updateOrderStatus, refreshInterval, setRefreshInterval, inventoryItems } = useData();
+  const { orders, menuItems, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, updateOrderStatus, refreshInterval, setRefreshInterval, inventoryItems, isOnline, lastUpdated } = useData();
   
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     const saved = localStorage.getItem('admin_expenses');
@@ -90,6 +91,26 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
   const [editInventoryQty, setEditInventoryQty] = useState('');
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
 
+  const [timeAgo, setTimeAgo] = useState<string>('');
+  const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<OrderData | null>(null);
+
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (!lastUpdated) {
+        setTimeAgo('');
+        return;
+      }
+      const seconds = Math.floor((new Date().getTime() - lastUpdated.getTime()) / 1000);
+      if (seconds < 60) setTimeAgo('Vừa xong');
+      else if (seconds < 3600) setTimeAgo(`${Math.floor(seconds / 60)} phút trước`);
+      else setTimeAgo(`${Math.floor(seconds / 3600)} giờ trước`);
+    };
+
+    updateTimeAgo();
+    const interval = setInterval(updateTimeAgo, 30000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
+
   useEffect(() => {
     const now = new Date();
     const day = now.getDate();
@@ -99,6 +120,34 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
     } else {
       setShowFixedCostReminder(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleOutOfStock = (e: any) => {
+      const item = e.detail;
+      // Play alert sound
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.5);
+      } catch (err) {
+        console.error('Error playing sound:', err);
+      }
+    };
+
+    window.addEventListener('itemOutOfStock', handleOutOfStock);
+    return () => window.removeEventListener('itemOutOfStock', handleOutOfStock);
   }, []);
 
   const handleUpdateInventory = async (e: React.FormEvent) => {
@@ -404,11 +453,11 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
       const today = new Date().toDateString();
       const todayExpenses = expenses
         .filter(exp => {
-          const type = exp.phan_loai || exp.Phan_Loai || 'Chi';
-          const time = exp.thoi_gian || exp.Thoi_Gian || exp.timestamp;
+          const type = exp.phan_loai || 'Chi';
+          const time = exp.thoi_gian;
           return type === 'Chi' && new Date(time).toDateString() === today;
         })
-        .reduce((sum, exp) => sum + Number(exp.so_tien || exp.So_Tien || 0), 0);
+        .reduce((sum, exp) => sum + Number(exp.so_tien || 0), 0);
 
       if (todayExpenses + Number(expenseAmount) > 1000000) {
         alert("Cảnh báo: Chi tiêu trong ngày đã vượt ngưỡng 1,000,000đ.");
@@ -618,8 +667,35 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
       value: monthlyExpensesByCategory[key]
     })).sort((a, b) => b.value - a.value);
 
-    return { revenue, cost, profit, orderCount, expenseData, revenueData, growth, costGrowth, monthlyRevenue, monthlyCost, monthlyProfit, monthlyExpenseChartData };
-  }, [orders, expenses, timeRange]);
+    // Inventory Forecast
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last7DaysOrders = orders.filter(o => new Date(o.timestamp) >= sevenDaysAgo && o.orderStatus === 'Hoàn thành');
+    
+    const consumptionMap: Record<string, number> = {};
+    last7DaysOrders.forEach(order => {
+      order.items.forEach(item => {
+        consumptionMap[item.name] = (consumptionMap[item.name] || 0) + item.quantity;
+      });
+    });
+
+    const inventoryForecast = menuItems
+      .filter(item => item.inventoryQty !== undefined)
+      .map(item => {
+        const weeklyConsumption = consumptionMap[item.name] || 0;
+        const suggestedRestock = Math.max(0, weeklyConsumption - (item.inventoryQty || 0));
+        return {
+          id: item.id,
+          name: item.name,
+          currentQty: item.inventoryQty || 0,
+          weeklyConsumption,
+          suggestedRestock,
+          status: (item.inventoryQty || 0) < weeklyConsumption ? 'low' : 'ok'
+        };
+      })
+      .sort((a, b) => b.weeklyConsumption - a.weeklyConsumption);
+
+    return { revenue, cost, profit, orderCount, expenseData, revenueData, growth, costGrowth, monthlyRevenue, monthlyCost, monthlyProfit, monthlyExpenseChartData, inventoryForecast };
+  }, [orders, expenses, menuItems, timeRange]);
 
   const COLORS = ['#C9252C', '#B91C1C', '#991B1B', '#7F1D1D', '#450A0A'];
 
@@ -732,19 +808,30 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
         </div>
       )}
 
-      {showFixedCostReminder && (
-        <div className="mx-6 mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl flex items-start gap-3 animate-pulse">
-          <Calendar className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-          <div className="flex-grow">
-            <p className="text-sm font-bold text-blue-800 dark:text-blue-300">
-              Nhắc nhở: Đã đến kỳ thanh toán chi phí cố định (Tiền nhà, Điện, Nước...).
-            </p>
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-              Còn {daysUntilFixedCost} ngày nữa là đến hạn (ngày 5).
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Fixed Cost Reminder */}
+      <AnimatePresence>
+        {showFixedCostReminder && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="px-6 pt-4 overflow-hidden"
+          >
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 p-4 rounded-2xl flex items-center gap-4">
+              <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center flex-shrink-0">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-black text-amber-800 dark:text-amber-400 uppercase tracking-tight">Nhắc nhở thanh toán</h4>
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-500">Hôm nay là ngày {new Date().getDate()}. Vui lòng thanh toán các chi phí cố định hàng tháng (Tiền nhà, điện, nước...) trước ngày 05.</p>
+              </div>
+              <button onClick={() => setShowFixedCostReminder(false)} className="text-amber-400 hover:text-amber-600">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="p-6 space-y-6">
         <AnimatePresence mode="wait">
@@ -863,8 +950,128 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-5"
+              className="space-y-6"
             >
+              {/* Monthly Report Section */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center px-1">
+                  <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Báo cáo tháng {new Date().getMonth() + 1}</h2>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-red-500'} shadow-[0_0_8px_rgba(16,185,129,0.5)]`} />
+                    <span className="text-[10px] font-bold text-stone-400 dark:text-stone-500">{timeAgo || 'Đang cập nhật...'}</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Doanh thu tháng</p>
+                    <p className="text-2xl font-black text-emerald-600">{stats.monthlyRevenue.toLocaleString()}đ</p>
+                  </div>
+                  <div className="bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Chi phí tháng</p>
+                    <p className="text-2xl font-black text-red-600">{stats.monthlyCost.toLocaleString()}đ</p>
+                  </div>
+                  <div className="bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Lợi nhuận ròng</p>
+                    <p className={`text-2xl font-black ${stats.monthlyProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {stats.monthlyProfit.toLocaleString()}đ
+                    </p>
+                  </div>
+                </div>
+
+                {/* Expense Bar Chart */}
+                <div className="bg-white dark:bg-stone-900 p-6 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-tight">Cơ cấu chi phí theo danh mục</h3>
+                    <BarChart3 className="w-4 h-4 text-stone-400" />
+                  </div>
+                  <div className="h-[250px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stats.expenseData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fontWeight: 700, fill: '#a8a29e' }} 
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fontWeight: 700, fill: '#a8a29e' }}
+                          tickFormatter={(value) => `${(value / 1000).toLocaleString()}k`}
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', fontWeight: 700 }}
+                          formatter={(value: number) => [value.toLocaleString() + 'đ', 'Số tiền']}
+                        />
+                        <Bar dataKey="value" fill="#C9252C" radius={[6, 6, 0, 0]} barSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              {/* Monthly Report Section */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center px-1">
+                  <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Báo cáo tháng {new Date().getMonth() + 1}</h2>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-red-500'} shadow-[0_0_8px_rgba(16,185,129,0.5)]`} />
+                    <span className="text-[10px] font-bold text-stone-400 dark:text-stone-500">{timeAgo || 'Đang cập nhật...'}</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Doanh thu tháng</p>
+                    <p className="text-2xl font-black text-emerald-600">{stats.monthlyRevenue.toLocaleString()}đ</p>
+                  </div>
+                  <div className="bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Chi phí tháng</p>
+                    <p className="text-2xl font-black text-red-600">{stats.monthlyCost.toLocaleString()}đ</p>
+                  </div>
+                  <div className="bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Lợi nhuận ròng</p>
+                    <p className={`text-2xl font-black ${stats.monthlyProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {stats.monthlyProfit.toLocaleString()}đ
+                    </p>
+                  </div>
+                </div>
+
+                {/* Expense Bar Chart */}
+                <div className="bg-white dark:bg-stone-900 p-6 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-tight">Cơ cấu chi phí theo danh mục</h3>
+                    <BarChart3 className="w-4 h-4 text-stone-400" />
+                  </div>
+                  <div className="h-[250px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stats.monthlyExpenseChartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fontWeight: 700, fill: '#a8a29e' }} 
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fontWeight: 700, fill: '#a8a29e' }}
+                          tickFormatter={(value) => `${(value / 1000).toLocaleString()}k`}
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', fontWeight: 700 }}
+                          formatter={(value: number) => [value.toLocaleString() + 'đ', 'Số tiền']}
+                        />
+                        <Bar dataKey="value" fill="#C9252C" radius={[6, 6, 0, 0]} barSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white dark:bg-stone-900 p-6 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-shadow duration-300 space-y-4 relative overflow-hidden group">
@@ -1220,13 +1427,22 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                               <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-[#C9252C] dark:text-red-400 font-black text-2xl leading-none mb-2">{order.total.toLocaleString()}đ</p>
-                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
-                              order.paymentStatus === 'Đã thanh toán' ? 'border-red-100 dark:border-red-900/30 text-[#C9252C] dark:text-red-400 bg-red-50 dark:bg-red-900/20' : 'border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
-                            }`}>
-                              {order.paymentStatus === 'Đã thanh toán' ? 'Đã trả' : 'Chưa trả'}
-                            </span>
+                          <div className="text-right flex flex-col items-end gap-2">
+                            <p className="text-[#C9252C] dark:text-red-400 font-black text-2xl leading-none">{order.total.toLocaleString()}đ</p>
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => setSelectedOrderForInvoice(order)}
+                                className="p-2 bg-stone-50 dark:bg-stone-800 rounded-xl text-stone-400 hover:text-[#C9252C] transition-all tap-active border border-stone-100 dark:border-stone-700"
+                                title="Xuất hóa đơn"
+                              >
+                                <Share2 className="w-4 h-4" />
+                              </button>
+                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
+                                order.paymentStatus === 'Đã thanh toán' ? 'border-red-100 dark:border-red-900/30 text-[#C9252C] dark:text-red-400 bg-red-50 dark:bg-red-900/20' : 'border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+                              }`}>
+                                {order.paymentStatus === 'Đã thanh toán' ? 'Đã trả' : 'Chưa trả'}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -1450,6 +1666,45 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                             >
                               <SettingsIcon className="w-3.5 h-3.5" />
                             </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Inventory Forecast Section */}
+                <div className="bg-white dark:bg-stone-900 rounded-[32px] p-6 border border-stone-100 dark:border-stone-800 shadow-sm">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-tight">Dự báo nhập hàng</h3>
+                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Dựa trên doanh số 7 ngày qua</p>
+                    </div>
+                    <TrendingUp className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {stats.inventoryForecast.length === 0 ? (
+                      <div className="py-8 text-center text-stone-400 text-xs font-bold">
+                        Chưa có dữ liệu dự báo
+                      </div>
+                    ) : (
+                      stats.inventoryForecast.slice(0, 5).map((item, idx) => (
+                        <div key={`forecast-${idx}`} className="flex items-center justify-between p-4 bg-stone-50 dark:bg-stone-800 rounded-2xl border border-stone-100/50 dark:border-stone-700/50">
+                          <div className="flex-grow">
+                            <h4 className="font-black text-stone-800 dark:text-white text-sm leading-tight">{item.name}</h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Tiêu thụ: {item.weeklyConsumption} món/tuần</span>
+                              {item.status === 'low' && (
+                                <span className="text-[8px] font-black text-red-500 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-md uppercase">Thiếu hụt</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Gợi ý nhập</p>
+                            <p className={`text-lg font-black ${item.suggestedRestock > 0 ? 'text-[#C9252C]' : 'text-emerald-600'}`}>
+                              {item.suggestedRestock > 0 ? `+${item.suggestedRestock}` : 'Đủ'}
+                            </p>
                           </div>
                         </div>
                       ))
@@ -1726,6 +1981,14 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {selectedOrderForInvoice && (
+          <Invoice 
+            order={selectedOrderForInvoice} 
+            onClose={() => setSelectedOrderForInvoice(null)} 
+          />
         )}
       </AnimatePresence>
     </div>

@@ -292,7 +292,10 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${!isMuted ? 'bg-purple-500/10 text-purple-500' : 'bg-stone-500/10 text-stone-500'}`}>
                   <Volume2 className="w-4 h-4" />
                 </div>
-                <span className="font-bold text-stone-700 dark:text-stone-300 text-sm">Thông báo</span>
+                <div className="flex flex-col items-start">
+                  <span className="font-bold text-stone-700 dark:text-stone-300 text-sm">Âm thanh thông báo</span>
+                  <span className="text-[10px] text-stone-400 dark:text-stone-500 font-medium">Phát tiếng "Ting Ting" khi có đơn mới</span>
+                </div>
               </div>
               <div className={`w-12 h-7 rounded-full transition-colors relative ${!isMuted ? 'bg-[#C9252C]' : 'bg-stone-300 dark:bg-stone-700'}`}>
                 <div className={`w-5 h-5 bg-white rounded-full shadow-sm absolute top-1 transition-all ${!isMuted ? 'left-6' : 'left-1'}`} />
@@ -361,7 +364,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
             </button>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">IP Máy in LAN</label>
+              <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">IP Máy in LAN/WiFi</label>
               <div className="relative">
                 <Wifi className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                 <input 
@@ -372,6 +375,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
                   className="w-full bg-stone-50 dark:bg-stone-950 border border-stone-100 dark:border-stone-800 rounded-2xl pl-11 pr-4 py-3 font-mono text-sm font-bold text-stone-800 dark:text-white focus:ring-2 focus:ring-[#C9252C]/20 focus:border-[#C9252C] outline-none transition-all"
                 />
               </div>
+              <p className="text-[10px] text-stone-400 font-medium px-1 italic">* Hệ thống hỗ trợ in trực tiếp qua trình duyệt (window.print) tối ưu cho khổ giấy 58mm/80mm.</p>
             </div>
           </div>
         </section>

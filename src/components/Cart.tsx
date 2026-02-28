@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trash2, Plus, Minus, ArrowRight, AlertCircle, Edit2, X, ShoppingBag, Clock, CheckCircle2, RefreshCw, ChevronRight, Sparkles, User } from 'lucide-react';
+import { Trash2, Plus, Minus, ArrowRight, AlertCircle, Edit2, X, ShoppingBag, Clock, CheckCircle2, RefreshCw, ChevronRight, Sparkles, User, Share2, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { CartItem, OrderData } from '../types';
 import { SIZES, TOPPINGS } from './Menu';
 import { useUI } from '../context/UIContext';
 import { useData } from '../context/DataContext';
+import { notificationService } from '../services/NotificationService';
+import { Invoice } from './Invoice';
 
 import { useCart } from '../context/CartContext';
 
@@ -37,6 +39,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
   const [aiEmptyState, setAiEmptyState] = useState<{title: string, content: string, button: string, emoji: string} | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+  const [showInvoice, setShowInvoice] = useState(false);
 
   const showToast = (message: string) => {
     setToast({ message, visible: true });
@@ -325,6 +328,9 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       setSubmitStatus('success');
       showToast('Tạo đơn thành công! Kho đã được cập nhật.');
       
+      // Notify via WebSocket
+      notificationService.notifyNewOrder(orderData);
+      
       clearCart();
       setCustomerName('');
       setTableNumber('');
@@ -470,6 +476,14 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
         </div>
 
         <div className="w-full space-y-3">
+          <button
+            onClick={() => setShowInvoice(true)}
+            className="w-full py-4 bg-stone-800 dark:bg-white text-white dark:text-black font-black rounded-2xl tap-active flex items-center justify-center gap-2 shadow-lg uppercase tracking-widest text-xs"
+          >
+            <FileText className="w-4 h-4" />
+            Xuất hóa đơn
+          </button>
+          
           <div className="flex gap-3">
             <button
               onClick={handleEditOrder}
@@ -537,16 +551,16 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
   }
 
   return (
-    <div className="flex flex-col min-h-full pb-32">
-      <div className="p-5 space-y-8">
+    <div className="flex flex-col min-h-full pb-24">
+      <div className="p-3 space-y-4">
         {/* Cart Items */}
-        <section className="space-y-4">
+        <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Món đã chọn ({cart.length})</h2>
-            <button onClick={() => setShowClearConfirm(true)} className="text-red-500 font-bold text-xs tap-active bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg">Xóa tất cả</button>
+            <h2 className="text-stone-400 dark:text-stone-500 font-black text-[9px] uppercase tracking-widest">Món đã chọn ({cart.length})</h2>
+            <button onClick={() => setShowClearConfirm(true)} className="text-red-500 font-bold text-[9px] tap-active bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-lg">Xóa tất cả</button>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-2">
             <AnimatePresence mode="popLayout">
               {cart.map((item, index) => (
                 <motion.div
@@ -555,41 +569,41 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
-                  className="card p-5 border border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900"
+                  className="card p-3 border border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900"
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="min-w-0 flex-grow pr-4">
-                      <h3 className="font-bold text-stone-800 dark:text-white text-lg truncate leading-tight mb-1">{item.name}</h3>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-stone-50 dark:bg-stone-800 text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="min-w-0 flex-grow pr-3">
+                      <h3 className="font-bold text-stone-800 dark:text-white text-sm truncate leading-tight mb-1">{item.name}</h3>
+                      <div className="flex flex-wrap gap-1">
+                        <span className="inline-flex items-center px-1 py-0.5 rounded-md bg-stone-50 dark:bg-stone-800 text-[8px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
                           {item.temperature}
                         </span>
                         {item.iceLevel && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-stone-50 dark:bg-stone-800 text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-md bg-stone-50 dark:bg-stone-800 text-[8px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
                             {item.iceLevel} đá
                           </span>
                         )}
                         {item.sugarLevel && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-stone-50 dark:bg-stone-800 text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-md bg-stone-50 dark:bg-stone-800 text-[8px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wide border border-stone-100 dark:border-stone-700">
                             {item.sugarLevel} đường
                           </span>
                         )}
                       </div>
                     </div>
-                    <p className="text-[#C9252C] font-black text-lg whitespace-nowrap">
+                    <p className="text-[#C9252C] font-black text-sm whitespace-nowrap">
                       {(item.unitPrice * item.quantity).toLocaleString()}đ
                     </p>
                   </div>
                   
-                  <div className="flex items-center justify-between pt-2 border-t border-stone-50 dark:border-stone-800 mt-2">
-                    <div className="flex items-center bg-stone-50 dark:bg-stone-800 rounded-[14px] p-1 border border-stone-100 dark:border-stone-700">
-                      <button onClick={() => handleUpdateQuantity(item, -1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Minus className="w-4 h-4" /></button>
-                      <span className="w-10 text-center font-black text-sm text-stone-800 dark:text-white">{item.quantity}</span>
-                      <button onClick={() => handleUpdateQuantity(item, 1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Plus className="w-4 h-4" /></button>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-stone-50 dark:border-stone-800 mt-1.5">
+                    <div className="flex items-center bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5 border border-stone-200 dark:border-stone-700">
+                      <button onClick={() => handleUpdateQuantity(item, -1)} className="w-7 h-7 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-[#C9252C] tap-active bg-white dark:bg-stone-700 rounded-md shadow-sm border border-stone-100 dark:border-stone-600 transition-colors"><Minus className="w-3 h-3" /></button>
+                      <span className="w-8 text-center font-black text-xs text-stone-800 dark:text-white">{item.quantity}</span>
+                      <button onClick={() => handleUpdateQuantity(item, 1)} className="w-7 h-7 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-[#C9252C] tap-active bg-white dark:bg-stone-700 rounded-md shadow-sm border border-stone-100 dark:border-stone-600 transition-colors"><Plus className="w-3 h-3" /></button>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setEditingItem(item)} className="w-9 h-9 flex items-center justify-center bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 rounded-[14px] tap-active border border-stone-100 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 hover:text-stone-600 dark:hover:text-stone-300"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => handleUpdateQuantity(item, -item.quantity)} className="w-9 h-9 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 rounded-[14px] tap-active border border-red-100 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                    <div className="flex gap-1">
+                      <button onClick={() => setEditingItem(item)} className="w-7 h-7 flex items-center justify-center bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 rounded-lg tap-active border border-stone-200 dark:border-stone-700 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors" title="Chỉnh sửa"><Edit2 className="w-3 h-3" /></button>
+                      <button onClick={() => handleUpdateQuantity(item, -item.quantity)} className="w-7 h-7 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg tap-active border border-red-100 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors" title="Xóa"><Trash2 className="w-3 h-3" /></button>
                     </div>
                   </div>
                 </motion.div>
@@ -599,70 +613,70 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
         </section>
 
         {/* Order Form */}
-        <section className="card p-6 border border-stone-100 dark:border-stone-800 space-y-6 bg-white dark:bg-stone-900">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-50 dark:bg-red-900/20 text-[#C9252C] rounded-[14px] flex items-center justify-center">
-                <User className="w-5 h-5" />
+        <section className="card p-4 border border-stone-100 dark:border-stone-800 space-y-4 bg-white dark:bg-stone-900">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-red-50 dark:bg-red-900/20 text-[#C9252C] rounded-lg flex items-center justify-center">
+                <User className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="font-black text-stone-800 dark:text-white text-lg">Thông tin nhận món</h2>
-                <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">Delivery Info</p>
+                <h2 className="font-black text-stone-800 dark:text-white text-sm">Thông tin nhận món</h2>
+                <p className="text-[8px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">Delivery Info</p>
               </div>
             </div>
             
             {/* Auto Submit Toggle */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Tự động gửi</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[8px] font-bold text-stone-400 uppercase tracking-widest">Tự động gửi</span>
               <button 
                 onClick={() => setIsAutoSubmitEnabled(!isAutoSubmitEnabled)}
-                className={`w-12 h-7 rounded-full transition-colors relative ${isAutoSubmitEnabled ? 'bg-[#C9252C]' : 'bg-stone-200 dark:bg-stone-700'}`}
+                className={`w-8 h-5 rounded-full transition-colors relative ${isAutoSubmitEnabled ? 'bg-[#C9252C]' : 'bg-stone-200 dark:bg-stone-700'}`}
               >
-                <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${isAutoSubmitEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isAutoSubmitEnabled ? 'translate-x-3' : 'translate-x-0'}`} />
               </button>
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Tên của bạn</label>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Tên của bạn</label>
               <input
                 type="text"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Nhập tên..."
-                className="input-field"
+                className="input-field py-2 text-xs"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số điện thoại</label>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số điện thoại</label>
               <input
                 type="tel"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="Nhập số điện thoại..."
-                className="input-field"
+                className="input-field py-2 text-xs"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số bàn (Tùy chọn)</label>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số bàn (Tùy chọn)</label>
               <input
                 type="text"
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
                 placeholder="Ví dụ: 05"
-                className="input-field"
+                className="input-field py-2 text-xs"
               />
             </div>
             
-            <div className="space-y-3">
-              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Thanh toán</label>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Thanh toán</label>
+              <div className="grid grid-cols-2 gap-2">
                 {['Tiền mặt', 'Chuyển khoản'].map((method) => (
                   <button
                     key={method}
                     onClick={() => setPaymentMethod(method as any)}
-                    className={`py-4 rounded-[18px] font-bold text-sm border transition-all tap-active relative overflow-hidden ${
+                    className={`py-2 rounded-lg font-bold text-[10px] border transition-all tap-active relative overflow-hidden ${
                       paymentMethod === method 
                         ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300 shadow-sm' 
                         : 'border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500'
@@ -670,44 +684,46 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
                   >
                     {method}
                     {paymentMethod === method && (
-                      <div className="absolute top-2 right-2 w-2 h-2 bg-[#C9252C] rounded-full" />
+                      <div className="absolute top-1 right-1 w-1 h-1 bg-[#C9252C] rounded-full" />
                     )}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[11px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Ghi chú</label>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Ghi chú</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Ví dụ: Ít đá, nhiều sữa..."
-                className="input-field resize-none min-h-[80px]"
+                className="input-field resize-none min-h-[60px] py-2 text-xs"
                 rows={2}
               />
             </div>
           </div>
         </section>
+      </div>
 
-        {submitStatus === 'error' && (
+      {submitStatus === 'error' && (
+        <div className="px-3 mb-4">
           <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-[20px] flex items-center gap-3 border border-red-100 dark:border-red-900/30 animate-shake">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <p className="text-sm font-bold">{errorMessage}</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Sticky Footer Summary */}
-      <div className="fixed bottom-20 left-0 right-0 p-5 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-stone-100/50 dark:border-stone-800/50 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] dark:shadow-none transition-colors">
-        <div className="flex items-center justify-between mb-4 px-1">
+      <div className="fixed bottom-16 left-0 right-0 p-3 bg-white/95 dark:bg-black/95 backdrop-blur-xl border-t border-stone-100/50 dark:border-stone-800/50 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] dark:shadow-none transition-colors">
+        <div className="flex items-center justify-between mb-3 px-1">
           <div className="relative">
-            <p className="text-stone-400 dark:text-stone-500 text-[10px] font-black uppercase tracking-widest mb-0.5">Tổng thanh toán</p>
+            <p className="text-stone-400 dark:text-stone-500 text-[9px] font-black uppercase tracking-widest mb-0.5">Tổng thanh toán</p>
             <div className="flex items-center gap-2">
               <motion.p 
                 animate={isSubmitting ? { scale: [1, 1.05, 1], opacity: [1, 0.7, 1] } : {}}
                 transition={{ duration: 1, repeat: Infinity }}
-                className="text-2xl font-black text-[#C9252C]"
+                className="text-xl font-black text-[#C9252C]"
               >
                 {total.toLocaleString()}đ
               </motion.p>
@@ -718,18 +734,18 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0 }}
                   >
-                    <Sparkles className="w-4 h-4 text-red-400 animate-pulse" />
+                    <Sparkles className="w-3.5 h-3.5 text-red-400 animate-pulse" />
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-stone-400 dark:text-stone-500 text-[10px] font-black uppercase tracking-widest mb-0.5">Số lượng</p>
+            <p className="text-stone-400 dark:text-stone-500 text-[9px] font-black uppercase tracking-widest mb-0.5">Số lượng</p>
             <motion.p 
               animate={isSubmitting ? { y: [0, -2, 0] } : {}}
               transition={{ duration: 0.5, repeat: Infinity }}
-              className="text-stone-800 dark:text-white font-bold"
+              className="text-stone-800 dark:text-white font-bold text-sm"
             >
               {cart.length} món
             </motion.p>
@@ -738,7 +754,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
         <button
           onClick={handleOrder}
           disabled={isSubmitting || !customerName}
-          className="w-full bg-[#C9252C] text-white py-4 rounded-[20px] font-black text-lg shadow-xl shadow-red-100 dark:shadow-none tap-active flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale transition-all hover:bg-red-600 relative overflow-hidden"
+          className="w-full bg-[#C9252C] text-white py-3.5 rounded-xl font-black text-base shadow-lg shadow-red-100 dark:shadow-none tap-active flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all hover:bg-red-600 relative overflow-hidden uppercase tracking-widest"
         >
           <AnimatePresence mode="wait">
             {isSubmitting ? (
@@ -803,6 +819,13 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
           />
         )}
 
+        {showInvoice && submittedOrder && (
+          <Invoice 
+            order={submittedOrder} 
+            onClose={() => setShowInvoice(false)} 
+          />
+        )}
+
         {toast.visible && (
           <motion.div 
             initial={{ opacity: 0, y: 50 }}
@@ -829,14 +852,24 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
 }
 
 function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose: () => void; onSave: (item: CartItem) => void }) {
+  const [quantity, setQuantity] = useState(item.quantity);
   const [temperature, setTemperature] = useState(item.temperature || 'Đá');
   const [sugarLevel, setSugarLevel] = useState(item.sugarLevel || 'Bình thường');
   const [iceLevel, setIceLevel] = useState(item.iceLevel || 'Bình thường');
   const [note, setNote] = useState(item.note || '');
 
   const unitPrice = item.price;
-
   const hasCustomizations = item.hasCustomizations !== false;
+
+  const handleUpdateQty = (delta: number) => {
+    const newQty = quantity + delta;
+    if (newQty < 1) return;
+    if (delta > 0 && item.inventoryQty !== undefined && newQty > item.inventoryQty) {
+      alert(`Chỉ còn ${item.inventoryQty} sản phẩm trong kho!`);
+      return;
+    }
+    setQuantity(newQty);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end justify-center z-[60]">
@@ -854,6 +887,25 @@ function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose:
         </div>
         
         <div className="flex-grow overflow-y-auto px-8 py-6 space-y-10 scrollbar-hide">
+          <section>
+            <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Số lượng</h4>
+            <div className="flex items-center justify-between bg-stone-50 dark:bg-stone-800 p-2 rounded-2xl border border-stone-100 dark:border-stone-700">
+              <button 
+                onClick={() => handleUpdateQty(-1)}
+                className="w-12 h-12 flex items-center justify-center bg-white dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl shadow-sm tap-active"
+              >
+                <Minus className="w-5 h-5" />
+              </button>
+              <span className="text-xl font-black text-stone-800 dark:text-white">{quantity}</span>
+              <button 
+                onClick={() => handleUpdateQty(1)}
+                className="w-12 h-12 flex items-center justify-center bg-white dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-xl shadow-sm tap-active"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          </section>
+
           {hasCustomizations && (
             <div className="grid grid-cols-1 gap-8">
               <section>
@@ -925,9 +977,14 @@ function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose:
         </div>
 
         <div className="p-8 bg-white dark:bg-stone-900 border-t border-stone-50 dark:border-stone-800">
+          <div className="flex justify-between items-center mb-6">
+            <span className="text-stone-400 dark:text-stone-500 font-bold text-sm uppercase tracking-widest">Thành tiền</span>
+            <span className="text-2xl font-black text-[#C9252C]">{(unitPrice * quantity).toLocaleString()}đ</span>
+          </div>
           <button
             onClick={() => onSave({
               ...item,
+              quantity,
               unitPrice,
               temperature: hasCustomizations ? temperature : undefined,
               sugarLevel: hasCustomizations ? sugarLevel : undefined,

@@ -15,7 +15,8 @@ import { ThemeProvider } from './context/ThemeContext';
 import { UIProvider, useUI } from './context/UIContext';
 import { DataProvider, useData } from './context/DataContext';
 import { CartProvider, useCart } from './context/CartContext';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, X } from 'lucide-react';
+import { notificationService } from './services/NotificationService';
 
 const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbxtqFTziakEfyDJQQsWmwZMytuC2PZwNmTkWC7gecpKKiGfOX1ERo9M9DNJYsEVW08/exec';
 
@@ -31,6 +32,27 @@ function AppContent({ appsScriptUrl, setAppsScriptUrl }: AppContentProps) {
   const { cart, cartCount, updateQuantity, updateCartItem, clearCart, restoreCart } = useCart();
   const [showNotifications, setShowNotifications] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [newOrderNotification, setNewOrderNotification] = useState<any>(null);
+
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribe((data) => {
+      if (data.type === 'NEW_ORDER_NOTIFICATION') {
+        setNewOrderNotification(data.order);
+        
+        // Play notification sound if not muted
+        const isMuted = localStorage.getItem('notificationMuted') === 'true';
+        if (!isMuted) {
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+          audio.volume = 0.8;
+          audio.play().catch(e => console.log('Audio play failed:', e));
+        }
+
+        // Automatically hide after 8 seconds
+        setTimeout(() => setNewOrderNotification(null), 8000);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     setIsFabHidden(showNotifications || isQrModalOpen);
@@ -81,18 +103,45 @@ function AppContent({ appsScriptUrl, setAppsScriptUrl }: AppContentProps) {
         )}
       </AnimatePresence>
 
+      {/* New Order Notification Toast */}
+      <AnimatePresence>
+        {newOrderNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -100, x: '-50%' }}
+            animate={{ opacity: 1, y: 20, x: '-50%' }}
+            exit={{ opacity: 0, y: -100, x: '-50%' }}
+            className="fixed top-0 left-1/2 translate-x-[-50%] z-[100] w-[90%] max-w-sm bg-stone-900 dark:bg-white text-white dark:text-black p-4 rounded-2xl shadow-2xl border border-white/10 dark:border-black/10 flex items-center gap-4"
+          >
+            <div className="w-12 h-12 bg-[#C9252C] rounded-xl flex items-center justify-center flex-shrink-0">
+              <ShoppingBag className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-grow min-w-0">
+              <h4 className="font-black text-[10px] uppercase tracking-widest text-red-400 mb-0.5">Đơn hàng mới!</h4>
+              <p className="text-sm font-bold truncate">{newOrderNotification.customerName || 'Khách hàng'}</p>
+              <p className="text-[10px] font-medium opacity-60">{newOrderNotification.total?.toLocaleString()}đ • {newOrderNotification.items?.length || 0} món</p>
+            </div>
+            <button 
+              onClick={() => setNewOrderNotification(null)}
+              className="p-2 hover:bg-white/10 dark:hover:bg-black/10 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 px-6 py-4 flex justify-between items-center bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-stone-100/50 dark:border-stone-800/50 transition-all duration-300">
-        <h1 className="text-xl font-extrabold text-stone-800 dark:text-white tracking-tight flex items-center gap-2">
-          {location.pathname === '/' && <Coffee className="w-6 h-6 text-[#C9252C]" />}
+      <header className="fixed top-0 left-0 right-0 z-40 px-4 py-3 flex justify-between items-center bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-stone-100/50 dark:border-stone-800/50 transition-all duration-300">
+        <h1 className="text-lg font-extrabold text-stone-800 dark:text-white tracking-tight flex items-center gap-2">
+          {location.pathname === '/' && <Coffee className="w-5 h-5 text-[#C9252C]" />}
           {getTitle()}
         </h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button 
             onClick={() => setShowNotifications(true)}
-            className="relative p-2 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-full tap-active hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+            className="relative p-1.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-full tap-active hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-4.5 h-4.5" />
           </button>
         </div>
       </header>
@@ -104,7 +153,7 @@ function AppContent({ appsScriptUrl, setAppsScriptUrl }: AppContentProps) {
       />
 
       {/* Main Content */}
-      <main className="flex-grow overflow-y-auto w-full relative pt-[72px]">
+      <main className="flex-grow overflow-y-auto w-full relative pt-[56px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -164,7 +213,7 @@ function AppContent({ appsScriptUrl, setAppsScriptUrl }: AppContentProps) {
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
-        <nav className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl border-t border-stone-100 dark:border-stone-800 px-4 pt-3 pb-8 flex justify-around items-center pointer-events-auto shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
+        <nav className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl border-t border-stone-100 dark:border-stone-800 px-2 pt-2 pb-6 flex justify-around items-center pointer-events-auto shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
           {[
             { to: '/', icon: Coffee, label: 'Menu' },
             { to: '/cart', icon: ShoppingBag, label: 'Giỏ', badge: cartCount },
@@ -179,25 +228,25 @@ function AppContent({ appsScriptUrl, setAppsScriptUrl }: AppContentProps) {
                 key={`${item.to}-${index}`}
                 to={item.to}
                 id={item.to === '/cart' ? 'bottom-nav-cart' : undefined}
-                className={`relative flex flex-col items-center gap-1 transition-all duration-300 tap-active py-1 px-3 ${
+                className={`relative flex flex-col items-center gap-0.5 transition-all duration-300 tap-active py-0.5 px-2 ${
                   isActive ? 'text-[#C9252C]' : 'text-stone-400 dark:text-stone-500'
                 }`}
               >
-                <div className={`relative p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-red-50 dark:bg-red-900/20 scale-110' : ''}`}>
-                  <Icon className={`w-6 h-6 transition-transform ${isActive ? 'scale-110' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
+                <div className={`relative p-1.5 rounded-xl transition-all duration-300 ${isActive ? 'bg-red-50 dark:bg-red-900/20 scale-105' : ''}`}>
+                  <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-105' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#C9252C] text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-stone-900 shadow-sm animate-in zoom-in duration-300">
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C9252C] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-stone-900 shadow-sm animate-in zoom-in duration-300">
                       {item.badge}
                     </span>
                   )}
                 </div>
-                <span className={`text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'opacity-100 translate-y-0' : 'opacity-60'}`}>
+                <span className={`text-[8px] font-black uppercase tracking-widest transition-all ${isActive ? 'opacity-100 translate-y-0' : 'opacity-60'}`}>
                   {item.label}
                 </span>
                 {isActive && (
                   <motion.div
                     layoutId="nav-indicator"
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-1 bg-[#C9252C] rounded-full"
+                    className="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-[#C9252C] rounded-full"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
                 )}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, ShoppingBag, Calendar, ChevronRight, Package, CreditCard, User } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Clock, ShoppingBag, Calendar, ChevronRight, Package, CreditCard, User, AlertCircle, X, Check, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { useData } from '../context/DataContext';
+import { Invoice } from './Invoice';
 
 interface OrderHistoryItem {
   orderId: string;
@@ -17,10 +18,62 @@ interface OrderHistoryItem {
 }
 
 export function OrderHistory() {
-  const { orders } = useData();
+  const { orders, menuItems } = useData();
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const [aiEmptyState, setAiEmptyState] = useState<{title: string, content: string, button: string, emoji: string} | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [toast, setToast] = useState<{ message: string; visible: boolean; type?: 'success' | 'warning' }>({ message: '', visible: false });
+  const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<any>(null);
+  
+  const prevStockStatus = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    // Initialize or update stock status ref
+    const currentStatus: Record<string, boolean> = {};
+    menuItems.forEach(item => {
+      const isOutOfStock = item.isOutOfStock || (item.inventoryQty !== undefined && item.inventoryQty <= 0);
+      
+      // If it was in stock and now it's out of stock
+      if (prevStockStatus.current[item.id] === false && isOutOfStock === true) {
+        setToast({
+          message: `Món "${item.name}" vừa hết hàng!`,
+          visible: true,
+          type: 'warning'
+        });
+        
+        // Play alert sound only if user is not looking at the screen
+        if (document.hidden) {
+          try {
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(660, audioContext.currentTime); // E5
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+          } catch (err) {
+            console.error('Error playing sound:', err);
+          }
+        }
+        
+        // Auto hide toast
+        setTimeout(() => {
+          setToast(prev => ({ ...prev, visible: false }));
+        }, 5000);
+      }
+      
+      currentStatus[item.id] = isOutOfStock;
+    });
+    
+    prevStockStatus.current = currentStatus;
+  }, [menuItems]);
 
   const emptyStates = [
     {
@@ -125,24 +178,29 @@ export function OrderHistory() {
     setIsGeneratingAI(true);
     try {
       // Get menu data for context
-      const menuData = localStorage.getItem('menu_data');
-      let menuContext = "";
-      if (menuData) {
-        try {
-          const items = JSON.parse(menuData);
-          const available = items.filter((i: any) => !i.isOutOfStock).map((i: any) => i.name);
-          const randomItems = available.sort(() => 0.5 - Math.random()).slice(0, 3);
-          if (randomItems.length > 0) {
-            menuContext = `Gợi ý khéo các món này: ${randomItems.join(', ')}.`;
-          }
-        } catch (e) {}
-      }
+      const availableItems = menuItems.filter(i => !i.isOutOfStock).map(i => i.name);
+      
+      // Get sales trends (top 3 items in last 30 days)
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const recentOrders = orders.filter(o => new Date(o.timestamp) >= thirtyDaysAgo);
+      const salesCount: Record<string, number> = {};
+      recentOrders.forEach(o => o.items.forEach(i => salesCount[i.name] = (salesCount[i.name] || 0) + i.quantity));
+      const trendingItems = Object.entries(salesCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+
+      const menuContext = trendingItems.length > 0 
+        ? `Các món đang hot: ${trendingItems.join(', ')}. Các món có sẵn: ${availableItems.slice(0, 10).join(', ')}.`
+        : `Các món có sẵn: ${availableItems.slice(0, 10).join(', ')}.`;
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", // Model tối ưu nhất cho text
+        model: "gemini-3-flash-preview",
         contents: `Tạo 1 thông báo lịch sử đơn hàng trống cho app quán nước. 
-        Style: Nhắc kỷ niệm, rủ rê quay lại, GenZ. ${menuContext}
+        Style: Nhắc kỷ niệm, rủ rê quay lại, GenZ, cá nhân hóa. 
+        Dựa vào dữ liệu này để gợi ý món cụ thể: ${menuContext}
         Tiêu đề < 25 ký tự, Nội dung < 80 ký tự. 
         Trả về JSON: title, content, button, emoji.`,
         config: {
@@ -188,7 +246,7 @@ export function OrderHistory() {
 
   const filteredOrders = useMemo(() => {
     const now = new Date();
-    return orders.filter(order => {
+    const filtered = orders.filter(order => {
       const orderDate = new Date(order.timestamp);
       if (timeRange === 'day') return orderDate.toDateString() === now.toDateString();
       if (timeRange === 'week') {
@@ -199,7 +257,14 @@ export function OrderHistory() {
       if (timeRange === 'year') return orderDate.getFullYear() === now.getFullYear();
       return true;
     });
+    
+    // Sort by total amount descending
+    return filtered.sort((a, b) => b.total - a.total);
   }, [orders, timeRange]);
+
+  const totalRevenue = useMemo(() => {
+    return filteredOrders.reduce((sum, order) => sum + order.total, 0);
+  }, [filteredOrders]);
 
   if (orders.length === 0) {
     const isAIEnabled = localStorage.getItem('enableAI') !== 'false';
@@ -237,14 +302,14 @@ export function OrderHistory() {
   }
 
   return (
-    <div className="p-5 space-y-6 pb-24">
+    <div className="p-4 space-y-5 pb-24">
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Lịch sử đơn hàng</h2>
-        <span className="text-stone-400 dark:text-stone-500 font-bold text-xs bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg">{filteredOrders.length} đơn</span>
+        <h2 className="text-stone-400 dark:text-stone-500 font-black text-[10px] uppercase tracking-widest">Lịch sử đơn hàng</h2>
+        <span className="text-stone-400 dark:text-stone-500 font-bold text-[10px] bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg">{filteredOrders.length} đơn</span>
       </div>
 
       {/* Time Range Selector */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5 scroll-smooth">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 scroll-smooth scrollbar-hide">
         {[
           { id: 'day', label: 'Hôm nay' },
           { id: 'week', label: 'Tuần này' },
@@ -254,9 +319,9 @@ export function OrderHistory() {
           <button
             key={range.id}
             onClick={() => setTimeRange(range.id as any)}
-            className={`px-5 py-2.5 rounded-[16px] whitespace-nowrap text-xs font-black uppercase tracking-widest transition-all tap-active border ${
+            className={`px-4 py-2 rounded-xl whitespace-nowrap text-[10px] font-black uppercase tracking-widest transition-all tap-active border ${
               timeRange === range.id
-                ? 'bg-[#C9252C] text-white border-[#C9252C] shadow-lg shadow-red-100 dark:shadow-none'
+                ? 'bg-[#C9252C] text-white border-[#C9252C] shadow-md shadow-red-100 dark:shadow-none'
                 : 'bg-white dark:bg-stone-900 text-stone-400 dark:text-stone-500 border-stone-100 dark:border-stone-800 shadow-sm dark:shadow-none'
             }`}
           >
@@ -265,16 +330,16 @@ export function OrderHistory() {
         ))}
       </div>
       
-      <div className="space-y-4">
+      <div className="space-y-3">
         <AnimatePresence mode="popLayout">
           {filteredOrders.length === 0 ? (
-            <div className="text-center py-20 flex flex-col items-center justify-center px-6">
-              <div className="w-20 h-20 bg-stone-50 dark:bg-stone-800 rounded-[32px] flex items-center justify-center mb-6 text-stone-300 dark:text-stone-600 shadow-sm animate-float">
-                <Package className="w-10 h-10" />
+            <div className="text-center py-16 flex flex-col items-center justify-center px-6">
+              <div className="w-16 h-16 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center mb-4 text-stone-300 dark:text-stone-600 shadow-sm animate-float">
+                <Package className="w-8 h-8" />
               </div>
-              <h3 className="text-stone-800 dark:text-white font-black text-lg mb-2">Chưa có đơn hàng nào</h3>
-              <p className="text-stone-400 dark:text-stone-500 font-medium text-sm max-w-[250px] leading-relaxed">
-                Không tìm thấy đơn hàng trong khoảng thời gian này. Thử chọn mốc thời gian khác xem sao nhé!
+              <h3 className="text-stone-800 dark:text-white font-black text-base mb-1">Chưa có đơn hàng nào</h3>
+              <p className="text-stone-400 dark:text-stone-500 font-medium text-xs max-w-[200px] leading-relaxed">
+                Không tìm thấy đơn hàng trong khoảng thời gian này.
               </p>
             </div>
           ) : (
@@ -285,38 +350,56 @@ export function OrderHistory() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="card p-5 space-y-4 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800"
+                className="card p-3 sm:p-4 space-y-3 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800"
               >
-              <div className="flex justify-between items-start">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">#{order.orderId}</span>
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${
-                      order.orderStatus === 'Hoàn thành' ? 'bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-400' :
-                      order.orderStatus === 'Đã hủy' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' :
-                      'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
-                    }`}>
-                      {order.orderStatus || 'Đã nhận'}
-                    </span>
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+                <div className="space-y-1 w-full sm:w-auto">
+                  <div className="flex items-center justify-between sm:justify-start gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">#{order.orderId}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${
+                        order.orderStatus === 'Hoàn thành' ? 'bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-400' :
+                        order.orderStatus === 'Đã hủy' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' :
+                        'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+                      }`}>
+                        {order.orderStatus || 'Đã nhận'}
+                      </span>
+                    </div>
+                    <div className="sm:hidden px-1.5 py-0.5 bg-stone-100 dark:bg-stone-800 rounded-md text-[8px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest">
+                      Tỷ lệ: {totalRevenue > 0 ? ((order.total / totalRevenue) * 100).toFixed(1) : 0}%
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 text-stone-800 dark:text-white">
-                    <User className="w-4 h-4 text-stone-400 dark:text-stone-500" />
+                    <User className="w-3.5 h-3.5 text-stone-400 dark:text-stone-500" />
                     <div className="flex flex-col">
-                      <h3 className="font-bold text-lg leading-none">{order.customerName}</h3>
-                      {order.phoneNumber && <span className="text-[10px] text-stone-400 dark:text-stone-500 font-medium mt-1">{order.phoneNumber}</span>}
+                      <h3 className="font-bold text-sm sm:text-base leading-none">{order.customerName}</h3>
+                      {order.phoneNumber && <span className="text-[9px] text-stone-400 dark:text-stone-500 font-medium mt-0.5">{order.phoneNumber}</span>}
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[#C9252C] font-black text-xl">{order.total.toLocaleString()}đ</p>
-                  <div className="flex items-center gap-1 text-[10px] text-stone-400 dark:text-stone-500 justify-end font-bold uppercase tracking-tighter mt-1">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(order.timestamp).toLocaleDateString('vi-VN')}
+                <div className="text-left sm:text-right w-full sm:w-auto flex sm:flex-col justify-between items-end sm:items-end">
+                  <div className="sm:hidden flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-1 text-[9px] text-stone-400 dark:text-stone-500 font-bold uppercase tracking-tighter">
+                      <Calendar className="w-2.5 h-2.5" />
+                      {new Date(order.timestamp).toLocaleDateString('vi-VN')} {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <p className="text-[#C9252C] font-black text-base sm:text-lg">{order.total.toLocaleString()}đ</p>
+                    <div className="hidden sm:flex flex-col items-end gap-1 mt-0.5">
+                      <div className="flex items-center gap-1 text-[9px] text-stone-400 dark:text-stone-500 font-bold uppercase tracking-tighter">
+                        <Calendar className="w-2.5 h-2.5" />
+                        {new Date(order.timestamp).toLocaleDateString('vi-VN')} {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div className="px-1.5 py-0.5 bg-stone-100 dark:bg-stone-800 rounded-md text-[8px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest">
+                        Tỷ lệ: {totalRevenue > 0 ? ((order.total / totalRevenue) * 100).toFixed(1) : 0}%
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
               
-              <div className="bg-stone-50 dark:bg-stone-800 rounded-[18px] p-4 space-y-3 border border-stone-100/50 dark:border-stone-700/50">
+              <div className="bg-stone-50 dark:bg-stone-800 rounded-2xl p-3 space-y-2 border border-stone-100/50 dark:border-stone-700/50">
                 {order.items.map((item, idx) => (
                   <div key={`history-order-item-${order.orderId}-${idx}`} className="flex justify-between items-center text-sm">
                     <div className="flex items-center gap-3">
@@ -346,11 +429,52 @@ export function OrderHistory() {
                     </span>
                   </div>
                 </div>
+                <button 
+                  onClick={() => setSelectedOrderForInvoice(order)}
+                  className="p-2 bg-stone-50 dark:bg-stone-800 rounded-xl text-stone-400 hover:text-[#C9252C] transition-all tap-active border border-stone-100 dark:border-stone-700"
+                  title="Xuất hóa đơn"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
               </div>
             </motion.div>
           )))}
         </AnimatePresence>
       </div>
+
+      {/* Invoice Modal */}
+      <AnimatePresence>
+        {selectedOrderForInvoice && (
+          <Invoice 
+            order={selectedOrderForInvoice} 
+            onClose={() => setSelectedOrderForInvoice(null)} 
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast.visible && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 left-4 right-4 z-[60]"
+          >
+            <div className={`${toast.type === 'warning' ? 'bg-orange-500 dark:bg-orange-600' : 'bg-stone-900 dark:bg-white'} text-white dark:text-black px-6 py-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10 dark:border-black/10`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-6 h-6 ${toast.type === 'warning' ? 'bg-white/20' : 'bg-[#C9252C]'} rounded-full flex items-center justify-center`}>
+                  {toast.type === 'warning' ? <AlertCircle className="w-4 h-4 text-white" /> : <Check className="w-4 h-4 text-white" />}
+                </div>
+                <span className="text-sm font-bold">{toast.message}</span>
+              </div>
+              <button onClick={() => setToast({ ...toast, visible: false })} className="text-white/60 dark:text-stone-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
