@@ -831,7 +831,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
                   .slice(0, 20)
                   .map((item, idx) => (
-                    <div key={`${item.type}-${item.id}-${idx}`} className="p-4 border-b border-stone-50 dark:border-stone-800 last:border-0 flex justify-between items-center">
+                    <div key={`cash-movement-${idx}`} className="p-4 border-b border-stone-50 dark:border-stone-800 last:border-0 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                           item.type === 'order' 
@@ -1174,7 +1174,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     
                     return (
                       <div 
-                        key={`order-${order.orderId || 'unknown'}-${index}`}
+                        key={`order-item-${index}`}
                         className={`card p-5 space-y-4 relative overflow-hidden duration-500 bg-white dark:bg-stone-900 ${
                           isNew ? 'border-[#C9252C] ring-4 ring-[#C9252C]/10' : 'border-stone-100 dark:border-stone-800'
                         }`}
@@ -1232,7 +1232,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
                         <div className="bg-stone-50 dark:bg-stone-800 rounded-[18px] p-4 space-y-2 border border-stone-100/50 dark:border-stone-700/50">
                           {order.items.map((item: any, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-sm">
+                            <div key={`order-item-${order.orderId}-${idx}`} className="flex justify-between items-center text-sm">
                               <div className="flex items-center gap-2">
                                 <span className="text-[#C9252C] dark:text-red-400 font-black">{item.quantity}x</span>
                                 <span className="text-stone-800 dark:text-white font-bold">{item.name}</span>
@@ -1368,7 +1368,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   </div>
                 ) : (
                   expenses.map((expense, index) => (
-                    <div key={`${expense.id_thu_chi}-${index}`} className="card p-5 flex items-center justify-between bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
+                    <div key={`expense-item-${index}`} className="card p-5 flex items-center justify-between bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 rounded-[16px] flex items-center justify-center border border-stone-100 dark:border-stone-800">
                           <Wallet className="w-5 h-5" />
@@ -1432,7 +1432,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                       <p className="text-center text-stone-400 text-xs py-4">Chưa có dữ liệu tồn kho</p>
                     ) : (
                       inventoryItems.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-3 bg-stone-50 dark:bg-stone-800 rounded-xl">
+                        <div key={`inventory-item-${idx}`} className="flex justify-between items-center p-3 bg-stone-50 dark:bg-stone-800 rounded-xl">
                           <div>
                             <p className="font-bold text-stone-800 dark:text-white text-sm">{item.name}</p>
                             <p className="text-[10px] text-stone-400 font-bold">{item.id}</p>
@@ -1466,7 +1466,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   </div>
                 ) : (
                   inventoryLogs.map((log, idx) => (
-                    <div key={`${log.id_nhap}-${idx}`} className="card p-5 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
+                    <div key={`inventory-log-${idx}`} className="card p-5 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
                       <div className="flex justify-between items-start mb-3">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
@@ -1616,7 +1616,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     className="input-field font-bold"
                   >
                     {availableMaterials.map((m, idx) => (
-                      <option key={`${m.code || m.ma_nl}-${idx}`} value={m.code || m.ma_nl}>
+                      <option key={`material-option-${idx}`} value={m.code || m.ma_nl}>
                         {(m.code || m.ma_nl)} - {(m.name || m.ten_nl || m.ten_mon)}
                       </option>
                     ))}

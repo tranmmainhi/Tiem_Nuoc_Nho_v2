@@ -11,7 +11,7 @@ interface SettingsProps {
 
 export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
   const { theme, toggleTheme } = useTheme();
-  const { refreshInterval, setRefreshInterval } = useData();
+  const { refreshInterval, setRefreshInterval, autoSyncEnabled: dataAutoSync, setAutoSyncEnabled: setDataAutoSync } = useData();
   
   // Initial values for dirty checking
   const [initialSettings, setInitialSettings] = useState({
@@ -24,6 +24,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
     enableAI: localStorage.getItem('enableAI') !== 'false',
     appsScriptUrl: appsScriptUrl,
     refreshInterval: refreshInterval,
+    autoSyncEnabled: localStorage.getItem('autoSyncEnabled') !== 'false',
   });
 
   // Store Settings
@@ -33,6 +34,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
 
   // Connection Settings
   const [url, setUrl] = useState(appsScriptUrl);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(initialSettings.autoSyncEnabled);
 
   // Printer Settings
   const [printerIp, setPrinterIp] = useState(initialSettings.printerIp);
@@ -60,10 +62,11 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
       isMuted !== initialSettings.isMuted ||
       enableAI !== initialSettings.enableAI ||
       url !== initialSettings.appsScriptUrl ||
-      localRefreshInterval !== initialSettings.refreshInterval;
+      localRefreshInterval !== initialSettings.refreshInterval ||
+      autoSyncEnabled !== initialSettings.autoSyncEnabled;
     
     setHasChanges(changed);
-  }, [storeName, storeAddress, wifiPass, printerIp, autoPrint, isMuted, enableAI, url, localRefreshInterval, initialSettings]);
+  }, [storeName, storeAddress, wifiPass, printerIp, autoPrint, isMuted, enableAI, url, localRefreshInterval, autoSyncEnabled, initialSettings]);
 
   const handleSave = () => {
     if (localRefreshInterval < 15) {
@@ -80,9 +83,11 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
     localStorage.setItem('enableAI', String(enableAI));
     localStorage.setItem('appsScriptUrl', url);
     localStorage.setItem('refreshInterval', String(localRefreshInterval));
+    localStorage.setItem('autoSyncEnabled', String(autoSyncEnabled));
     
     setAppsScriptUrl(url);
     setRefreshInterval(localRefreshInterval);
+    setDataAutoSync(autoSyncEnabled);
 
     // Update initial settings to match current saved state
     setInitialSettings({
@@ -95,6 +100,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
       enableAI,
       appsScriptUrl: url,
       refreshInterval: localRefreshInterval,
+      autoSyncEnabled: autoSyncEnabled,
     });
 
     setIsSaved(true);
@@ -158,22 +164,32 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
                     <Clock className="w-5 h-5" />
                   </div>
                   <div>
-                    <label className="text-[11px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-wider">Tần suất làm mới</label>
-                    <p className="text-[10px] text-stone-400 font-medium">Tự động cập nhật đơn hàng & thực đơn</p>
+                    <label className="text-[11px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-wider">Tự động đồng bộ</label>
+                    <p className="text-[10px] text-stone-400 font-medium">Cập nhật đơn hàng & thực đơn</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="number"
-                    min="15"
-                    value={localRefreshInterval}
-                    onChange={(e) => setLocalRefreshInterval(Number(e.target.value))}
-                    className="w-20 bg-stone-50 dark:bg-stone-950 px-3 py-2 rounded-xl border border-stone-100 dark:border-stone-800 text-sm font-black text-[#C9252C] text-center focus:ring-2 focus:ring-[#C9252C]/20 focus:outline-none"
-                  />
-                  <span className="text-sm font-black text-stone-500">s</span>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setAutoSyncEnabled(!autoSyncEnabled)}
+                    className={`w-12 h-7 rounded-full transition-colors relative ${autoSyncEnabled ? 'bg-[#C9252C]' : 'bg-stone-200 dark:bg-stone-700'}`}
+                  >
+                    <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${autoSyncEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                  {autoSyncEnabled && (
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number"
+                        min="15"
+                        value={localRefreshInterval}
+                        onChange={(e) => setLocalRefreshInterval(Number(e.target.value))}
+                        className="w-16 bg-stone-50 dark:bg-stone-950 px-2 py-1.5 rounded-xl border border-stone-100 dark:border-stone-800 text-xs font-black text-[#C9252C] text-center focus:ring-2 focus:ring-[#C9252C]/20 focus:outline-none"
+                      />
+                      <span className="text-xs font-black text-stone-500">s</span>
+                    </div>
+                  )}
                 </div>
               </div>
-              {localRefreshInterval < 15 && (
+              {autoSyncEnabled && localRefreshInterval < 15 && (
                 <p className="text-xs text-red-500 font-bold mt-2">Thời gian làm mới tối thiểu là 15 giây để tránh lỗi Rate Limit.</p>
               )}
             </div>

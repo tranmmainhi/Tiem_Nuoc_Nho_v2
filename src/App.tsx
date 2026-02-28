@@ -17,7 +17,7 @@ import { DataProvider, useData } from './context/DataContext';
 import { CartProvider, useCart } from './context/CartContext';
 import { RefreshCw, Loader2 } from 'lucide-react';
 
-const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbzUw7Af7sB8zVwOkdYuaBaDCI3t3CMlXpALJ5QVyl74FCYfuOrtIguB2RJYk6RaY_em/exec';
+const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbxtqFTziakEfyDJQQsWmwZMytuC2PZwNmTkWC7gecpKKiGfOX1ERo9M9DNJYsEVW08/exec';
 
 interface AppContentProps {
   appsScriptUrl: string;

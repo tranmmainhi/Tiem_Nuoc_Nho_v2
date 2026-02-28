@@ -192,12 +192,30 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
 
   if (isLoading && menuItems.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-        <div className="w-16 h-16 relative">
-          <div className="absolute inset-0 border-4 border-red-100 dark:border-red-900 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-[#C9252C] rounded-full border-t-transparent animate-spin"></div>
+      <div className="flex flex-col min-h-full pb-20">
+        <div className="sticky top-0 z-30 bg-white/95 dark:bg-black/95 backdrop-blur-xl px-4 pt-3 pb-3 space-y-3 border-b border-stone-100/50 dark:border-stone-800/50 shadow-sm">
+           {/* Skeleton Header */}
+           <div className="h-10 bg-stone-100 dark:bg-stone-800 rounded-2xl animate-pulse" />
+           <div className="flex gap-2 overflow-hidden">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="h-8 w-20 bg-stone-100 dark:bg-stone-800 rounded-xl animate-pulse flex-shrink-0" />
+              ))}
+           </div>
         </div>
-        <p className="mt-6 text-stone-500 dark:text-stone-400 font-bold tracking-tight">Đang chuẩn bị thực đơn...</p>
+        <div className="p-5 grid grid-cols-2 gap-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="bg-white dark:bg-stone-900 rounded-2xl p-3 h-48 border border-stone-100 dark:border-stone-800 shadow-sm flex flex-col justify-between animate-pulse">
+              <div className="space-y-2">
+                <div className="h-4 bg-stone-100 dark:bg-stone-800 rounded w-3/4" />
+                <div className="h-3 bg-stone-100 dark:bg-stone-800 rounded w-1/2" />
+              </div>
+              <div className="flex justify-between items-end">
+                <div className="h-5 bg-stone-100 dark:bg-stone-800 rounded w-1/3" />
+                <div className="h-7 w-7 bg-stone-100 dark:bg-stone-800 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -315,7 +333,7 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
           {filteredItems.map((item, index) => (
             <motion.div
               layout
-              key={`menu-item-${item.id}-${index}`}
+              key={`menu-item-${index}`}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -503,48 +521,47 @@ const MenuItemCard: React.FC<{
         </div>
       )}
 
-      <div className="flex justify-between items-start mb-1.5">
-        <div className="flex-1 pr-2">
-          <h3 className="font-bold text-stone-800 dark:text-white text-sm leading-snug line-clamp-2 group-hover:text-[#C9252C] transition-colors">
-            {item.name}
+      <div className="flex flex-col h-full">
+        <div className="flex-1 mb-2">
+          <div className="flex justify-between items-start gap-1">
+            <h3 className="font-bold text-stone-800 dark:text-white text-sm leading-tight line-clamp-2 group-hover:text-[#C9252C] transition-colors">
+              {item.name}
+            </h3>
             {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
-              <span className="ml-1.5 text-[10px] font-black text-orange-500 animate-pulse">
-                (Còn {item.inventoryQty})
+              <span className="flex-shrink-0 text-[9px] font-black text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded-md animate-pulse">
+                Còn {item.inventoryQty}
               </span>
             )}
-          </h3>
+          </div>
+          <p className="text-stone-400 dark:text-stone-500 text-[10px] font-bold uppercase tracking-wider mt-1">
+            {item.category}
+          </p>
         </div>
-      </div>
 
-      <div className="mb-3 flex flex-wrap gap-2 items-center">
-        <p className="text-stone-400 dark:text-stone-500 text-[10px] font-medium uppercase tracking-wide line-clamp-1">
-          {item.category}
-        </p>
-      </div>
-
-      <div className="flex items-center justify-between mt-auto">
-        <p className="text-[#C9252C] font-black text-base">
-          {item.price.toLocaleString('vi-VN')}
-          <span className="text-[10px] align-top ml-0.5">đ</span>
-        </p>
-        
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (item.isOutOfStock) {
-              onOutOfStockClick();
-            } else {
-              onAddQuick(e);
-            }
-          }}
-          className={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm tap-active transition-transform hover:scale-105 active:scale-95 ${
-            item.isOutOfStock 
-              ? 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500' 
-              : 'bg-[#C9252C] text-white shadow-red-200 dark:shadow-none'
-          }`}
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center justify-between mt-auto pt-2 border-t border-stone-50 dark:border-stone-800/50">
+          <p className="text-[#C9252C] font-black text-sm">
+            {item.price.toLocaleString('vi-VN')}
+            <span className="text-[9px] align-top ml-0.5">đ</span>
+          </p>
+          
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (item.isOutOfStock) {
+                onOutOfStockClick();
+              } else {
+                onAddQuick(e);
+              }
+            }}
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-sm tap-active transition-all hover:scale-105 active:scale-95 ${
+              item.isOutOfStock 
+                ? 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500' 
+                : 'bg-[#C9252C] text-white shadow-red-200 dark:shadow-none'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </motion.div>
   );

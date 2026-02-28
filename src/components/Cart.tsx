@@ -16,7 +16,7 @@ interface CartProps {
 
 export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
   const { setIsFabHidden } = useUI();
-  const { orders, createOrder, fetchAllData } = useData();
+  const { orders, createOrder, fetchAllData, updateOrderStatus } = useData();
   const { cart, updateQuantity, updateCartItem, clearCart, restoreCart } = useCart();
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -349,23 +349,38 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
     }
   };
 
+  useEffect(() => {
+    // Auto-close success screen when unmounting (switching tabs)
+    return () => {
+      setSubmittedOrder(null);
+      localStorage.removeItem('submittedOrder');
+    };
+  }, []);
+
+  const mapCartToBackend = (items: CartItem[]) => {
+    return items.map(item => ({
+      ma_mon: item.id || (item as any).ma_mon, 
+      so_luong: item.quantity,
+      has_customizations: item.hasCustomizations ?? false,
+      ten_mon: item.name
+    }));
+  };
+
   const handleCancelOrder = async () => {
     if (!submittedOrder) return;
     setIsSubmitting(true);
     try {
-      const response = await fetch(appsScriptUrl, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'cancelOrder', orderId: submittedOrder.orderId }),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      });
-      const data = await response.json();
-      if (data.status === 'success') {
+      const cartItemsPayload = mapCartToBackend(submittedOrder.items);
+      const success = await updateOrderStatus(submittedOrder.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
+      
+      if (success) {
+        showToast('Hủy đơn thành công!');
         setSubmittedOrder(null);
         localStorage.removeItem('submittedOrder');
+        clearCart();
         setSubmitStatus('idle');
-        await fetchAllData(false); // Refetch data
       } else {
-        throw new Error(data.message || 'Lỗi khi hủy đơn');
+        throw new Error('Lỗi khi hủy đơn');
       }
     } catch (err) {
       alert('Không thể hủy đơn hàng. Vui lòng thử lại.');
@@ -378,11 +393,11 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
     if (!submittedOrder) return;
     setIsSubmitting(true);
     try {
-      await fetch(appsScriptUrl, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'cancelOrder', orderId: submittedOrder.orderId }),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      });
+      const cartItemsPayload = mapCartToBackend(submittedOrder.items);
+      // Cancel old order first
+      await updateOrderStatus(submittedOrder.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
+      
+      // Restore cart
       restoreCart(submittedOrder.items);
 
       setCustomerName(submittedOrder.customerName);
@@ -392,7 +407,6 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       setSubmittedOrder(null);
       localStorage.removeItem('submittedOrder');
       setSubmitStatus('idle');
-      await fetchAllData(false); // Refetch data
     } catch (err) {
       alert('Không thể chỉnh sửa lúc này. Vui lòng thử lại.');
     } finally {
@@ -400,9 +414,23 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
     }
   };
 
+  const handleNewOrder = () => {
+    setSubmittedOrder(null);
+    localStorage.removeItem('submittedOrder');
+    setSubmitStatus('idle');
+    clearCart();
+  };
+
     if (submittedOrder) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-full px-6 py-10 text-center">
+      <div className="flex flex-col items-center justify-center min-h-full px-6 py-10 text-center relative">
+        <button 
+          onClick={handleNewOrder}
+          className="absolute top-4 right-4 w-10 h-10 bg-stone-100 dark:bg-stone-800 rounded-full flex items-center justify-center text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         <motion.div 
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -461,11 +489,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
             </button>
           </div>
           <button
-            onClick={() => {
-              setSubmittedOrder(null);
-              localStorage.removeItem('submittedOrder');
-              setSubmitStatus('idle');
-            }}
+            onClick={handleNewOrder}
             className="w-full py-5 bg-[#C9252C] text-white font-black rounded-2xl tap-active shadow-xl shadow-red-100 dark:shadow-none"
           >
             Đặt đơn mới
@@ -527,7 +551,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
               {cart.map((item, index) => (
                 <motion.div
                   layout
-                  key={`${item.cartItemId}-${index}`}
+                  key={`cart-item-${index}`}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}

@@ -56,7 +56,9 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
 
   // Derived State: Categories for dropdown
   const existingCategories = useMemo(() => {
-    const cats = Array.from(new Set(menuItems.map(i => i.danh_muc))).filter(Boolean);
+    const cats = Array.from(new Set(menuItems.map(i => i.danh_muc)))
+      .filter(Boolean)
+      .filter(cat => cat !== 'Tất cả');
     return cats.sort();
   }, [menuItems]);
 
@@ -67,7 +69,8 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
     if (searchQuery) {
       items = items.filter(item => 
         item.ten_mon.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.ma_mon.toLowerCase().includes(searchQuery.toLowerCase())
+        item.ma_mon.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.danh_muc.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -293,7 +296,7 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  key={`${item.ma_mon}-${idx}`} 
+                  key={`menu-manager-item-${idx}`} 
                   className={`group bg-white dark:bg-stone-900 p-5 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden ${!item.co_san ? 'opacity-70 grayscale-[0.5]' : ''}`}
                 >
                   {/* Status Badges */}
@@ -305,6 +308,11 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                     }`}>
                       {item.co_san ? 'Còn hàng' : 'Hết hàng'}
                     </span>
+                    {item.inventoryQty !== undefined && item.inventoryQty <= 5 && (
+                      <span className="text-[9px] font-black px-2 py-1 rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 uppercase tracking-wider border border-orange-100 dark:border-orange-900/30 animate-pulse">
+                        Sắp hết ({item.inventoryQty})
+                      </span>
+                    )}
                     {item.has_customizations && (
                       <span className="text-[9px] font-black px-2 py-1 rounded-lg bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400 uppercase tracking-wider border border-stone-200 dark:border-stone-700">
                         Tùy chỉnh

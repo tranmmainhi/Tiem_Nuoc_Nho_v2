@@ -26,9 +26,11 @@ interface DataContextType {
   isRefreshing: boolean;
   error: string | null;
   refreshInterval: number;
+  autoSyncEnabled: boolean;
+  setAutoSyncEnabled: (enabled: boolean) => void;
   setRefreshInterval: (interval: number) => void;
   fetchAllData: (showFullLoader?: boolean) => Promise<void>;
-  updateOrderStatus: (orderId: string, status: string, paymentStatus?: string) => Promise<boolean>;
+  updateOrderStatus: (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => Promise<boolean>;
   createOrder: (orderData: any, showLoader?: boolean) => Promise<boolean>;
 }
 
@@ -45,6 +47,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     const saved = localStorage.getItem('refreshInterval');
     return saved ? Math.max(15, Number(saved)) : 30;
   });
+  const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => {
+    const saved = localStorage.getItem('autoSyncEnabled');
+    return saved !== 'false'; // Default to true
+  });
 
   const isFetchingRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
@@ -53,6 +59,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     const safeInterval = Math.max(15, interval);
     setRefreshIntervalState(safeInterval);
     localStorage.setItem('refreshInterval', String(safeInterval));
+  };
+
+  const setAutoSyncEnabled = (enabled: boolean) => {
+    setAutoSyncEnabledState(enabled);
+    localStorage.setItem('autoSyncEnabled', String(enabled));
   };
 
   const fetchAllData = useCallback(async (showFullLoader = false) => {
@@ -214,6 +225,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
 
   // Smart Polling
   useEffect(() => {
+    if (!autoSyncEnabled) return;
+
     const intervalId = setInterval(() => {
       // Only poll if tab is active and not already fetching
       if (document.visibilityState === 'visible' && !isFetchingRef.current) {
@@ -222,14 +235,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     }, refreshInterval * 1000);
 
     return () => clearInterval(intervalId);
-  }, [fetchAllData, refreshInterval]);
+  }, [fetchAllData, refreshInterval, autoSyncEnabled]);
 
   // Initial Load
   useEffect(() => {
     fetchAllData(true);
   }, [appsScriptUrl]);
 
-  const updateOrderStatus = async (orderId: string, status: string, paymentStatus?: string) => {
+  const updateOrderStatus = async (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => {
     if (!appsScriptUrl) return false;
     setIsLoading(true);
     try {
@@ -239,7 +252,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           action: 'updateOrderStatus', 
           orderId, 
           orderStatus: status,
-          paymentStatus: paymentStatus
+          paymentStatus: paymentStatus,
+          ...additionalData
         }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       });
@@ -287,6 +301,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       isRefreshing, 
       error, 
       refreshInterval, 
+      autoSyncEnabled,
+      setAutoSyncEnabled,
       setRefreshInterval, 
       fetchAllData,
       updateOrderStatus,

@@ -281,7 +281,7 @@ export function OrderHistory() {
             filteredOrders.map((order, index) => (
               <motion.div
                 layout
-                key={`${order.orderId}-${index}`}
+                key={`history-item-${index}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
@@ -318,7 +318,7 @@ export function OrderHistory() {
               
               <div className="bg-stone-50 dark:bg-stone-800 rounded-[18px] p-4 space-y-3 border border-stone-100/50 dark:border-stone-700/50">
                 {order.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-sm">
+                  <div key={`history-order-item-${order.orderId}-${idx}`} className="flex justify-between items-center text-sm">
                     <div className="flex items-center gap-3">
                       <div className="w-6 h-6 bg-white dark:bg-stone-700 rounded-lg flex items-center justify-center text-[10px] font-black text-[#C9252C] shadow-sm border border-stone-100 dark:border-stone-600">
                         {item.quantity}
