@@ -371,39 +371,6 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
   const updateStatus = async (orderId: string, status: string, paymentStatus?: string) => {
     try {
-      // Update stock if completed or cancelled
-      const order = orders.find(o => o.orderId === orderId);
-      if (order) {
-        // If marking as Completed, deduct stock
-        if (status === 'Hoàn thành' && order.orderStatus !== 'Hoàn thành') {
-          order.items.forEach(item => {
-            fetch(appsScriptUrl, {
-              method: 'POST',
-              body: JSON.stringify({
-                action: 'updateInventory',
-                itemName: item.name,
-                quantityChange: -item.quantity
-              }),
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            }).catch(err => console.error('Failed to deduct inventory:', err));
-          });
-        }
-        // If cancelling a Completed order, restore stock
-        else if (status === 'Đã hủy' && order.orderStatus === 'Hoàn thành') {
-          order.items.forEach(item => {
-            fetch(appsScriptUrl, {
-              method: 'POST',
-              body: JSON.stringify({
-                action: 'updateInventory',
-                itemName: item.name,
-                quantityChange: item.quantity
-              }),
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            }).catch(err => console.error('Failed to restore inventory:', err));
-          });
-        }
-      }
-
       const success = await updateOrderStatus(orderId, status, paymentStatus);
       if (!success) {
         alert('Lỗi cập nhật trạng thái');

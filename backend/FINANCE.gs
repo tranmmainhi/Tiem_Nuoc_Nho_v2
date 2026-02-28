@@ -3,41 +3,68 @@
  */
 
 /**
- * Ghi log báo cáo tài chính khi đơn hàng hoàn thành
+ * Khởi tạo cấu trúc Tab FINANCE_REPORT
  */
-function logFinanceReport(ss, orderData, headers) {
-  const financeSheet = ss.getSheetByName("FINANCE_REPORT") || createFinanceReportTab(ss);
+function initFinanceStructure() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("FINANCE_REPORT");
   
-  const totalIdx = headers.indexOf("Total");
-  const timestampIdx = headers.indexOf("Timestamp");
-  const orderIdIdx = headers.indexOf("Order_ID");
-
-  const total = Number(orderData[totalIdx] || 0);
-  const vat = total * 0.08; // VAT 8%
-  const netRevenue = total - vat; // Thuần
-  const timestamp = orderData[timestampIdx] || new Date();
-  const orderId = orderData[orderIdIdx];
-
-  const row = [
-    new Date(timestamp), // Ngày
-    orderId,             // Mã đơn
-    total,               // Tổng thu
-    vat,                 // VAT 8%
-    netRevenue           // Thuần
-  ];
-
-  financeSheet.appendRow(row);
+  if (!sheet) {
+    sheet = ss.insertSheet("FINANCE_REPORT");
+    const headers = ["Mã Đơn", "Ngày", "Doanh Thu Trước Thuế", "VAT (8%)", "Doanh Thu Ròng", "Tiền Hủy Đơn"];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#f0f0f0");
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
 }
 
 /**
- * Tạo Tab FINANCE_REPORT nếu chưa có
+ * Ghi log báo cáo tài chính hàng ngày
  */
-function createFinanceReportTab(ss) {
-  const sheet = ss.insertSheet("FINANCE_REPORT");
-  const headers = ["Ngày", "Mã đơn", "Tổng thu", "VAT 8%", "Thuần"];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#f0f0f0");
-  sheet.setFrozenRows(1);
-  return sheet;
+function logDailySummary(orderData, status) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const financeSheet = ss.getSheetByName("FINANCE_REPORT") || initFinanceStructure();
+  
+  const headers = ss.getSheetByName("ORDERS").getDataRange().getValues()[0];
+  const findCol = (patterns) => headers.findIndex(h => {
+    const lowerH = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return patterns.some(p => lowerH.includes(p.toLowerCase()));
+  });
+
+  const totalIdx = findCol(['tong tien', 'total', 'amount']);
+  const timestampIdx = findCol(['thoi gian', 'timestamp', 'date']);
+  const orderIdIdx = findCol(['ma don', 'order id', 'id']);
+
+  const total = totalIdx !== -1 ? Number(orderData[totalIdx] || 0) : 0;
+  const timestamp = timestampIdx !== -1 ? orderData[timestampIdx] : new Date();
+  const orderId = orderIdIdx !== -1 ? orderData[orderIdIdx] : "N/A";
+
+  let row = [];
+  if (status.toLowerCase() === "completed" || status.toLowerCase() === "hoàn thành") {
+    const vat = total * 0.08;
+    const netRevenue = total - vat;
+    row = [
+      orderId,
+      new Date(timestamp),
+      total,
+      vat,
+      netRevenue,
+      0 // Tiền hủy đơn
+    ];
+  } else if (status.toLowerCase() === "cancelled" || status.toLowerCase() === "đã hủy") {
+    row = [
+      orderId,
+      new Date(timestamp),
+      0, // Doanh thu trước thuế
+      0, // VAT
+      0, // Doanh thu ròng
+      total // Tiền hủy đơn
+    ];
+  }
+
+  if (row.length > 0) {
+    financeSheet.appendRow(row);
+  }
 }
 
 /**
