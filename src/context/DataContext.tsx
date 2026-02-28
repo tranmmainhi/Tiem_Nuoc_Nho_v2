@@ -89,6 +89,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         ? ordersJson.data
         : (Array.isArray(ordersJson) ? ordersJson : []);
 
+      // Deduplicate Orders
+      const uniqueOrdersMap = new Map();
+      if (Array.isArray(ordersData)) {
+        ordersData.forEach((order: any) => {
+          if (order.orderId) {
+            uniqueOrdersMap.set(order.orderId, order);
+          }
+        });
+      }
+      const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
       // Try to fetch inventory, but don't block if it fails
       let inventoryData = [];
       try {
@@ -149,8 +160,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           const id = String(item[idKey] || '');
           const name = String(item[nameKey] || '');
           
-          // Skip items without a name
-          if (!name) return null;
+          // Skip items without a name or ID
+          if (!name || !id) return null;
 
           const inventoryQty = inventoryMap.has(id) ? inventoryMap.get(id) : undefined;
           let isOutOfStock = String(item[stockKey]) === 'false' || item[stockKey] === false;
@@ -169,10 +180,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
             inventoryQty
           };
         }).filter((item) => item !== null) as MenuItem[];
-        setMenuItems(mappedMenu);
+        
+        // Deduplicate Menu Items
+        const uniqueMenuMap = new Map();
+        mappedMenu.forEach(item => {
+          if (item.id) uniqueMenuMap.set(item.id, item);
+        });
+        setMenuItems(Array.from(uniqueMenuMap.values()));
       }
 
-      if (Array.isArray(ordersData)) {
+      if (uniqueOrders.length > 0) {
+        setOrders(uniqueOrders);
+      } else if (Array.isArray(ordersData)) {
         setOrders(ordersData);
       }
 
@@ -181,6 +200,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       console.error('Data fetch error:', err);
       if (err.message?.includes('Rate exceeded')) {
         setError('Hệ thống đang bận. Vui lòng đợi...');
+      } else if (err.message?.includes('Failed to fetch')) {
+        setError('Không thể kết nối. Vui lòng kiểm tra mạng hoặc URL.');
       } else {
         setError('Lỗi kết nối máy chủ');
       }

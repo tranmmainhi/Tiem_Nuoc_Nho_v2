@@ -505,8 +505,13 @@ const MenuItemCard: React.FC<{
 
       <div className="flex justify-between items-start mb-1.5">
         <div className="flex-1 pr-2">
-          <h3 className="font-bold text-stone-800 dark:text-white text-sm leading-snug line-clamp-2 group-hover:text-[#C9252C] transition-colors flex items-center gap-1.5">
+          <h3 className="font-bold text-stone-800 dark:text-white text-sm leading-snug line-clamp-2 group-hover:text-[#C9252C] transition-colors">
             {item.name}
+            {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
+              <span className="ml-1.5 text-[10px] font-black text-orange-500 animate-pulse">
+                (Còn {item.inventoryQty})
+              </span>
+            )}
           </h3>
         </div>
       </div>
@@ -515,12 +520,6 @@ const MenuItemCard: React.FC<{
         <p className="text-stone-400 dark:text-stone-500 text-[10px] font-medium uppercase tracking-wide line-clamp-1">
           {item.category}
         </p>
-        {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
-          <span className="text-[9px] font-black text-orange-600 bg-orange-100 dark:bg-orange-900/40 px-1.5 py-0.5 rounded flex items-center gap-1">
-            <AlertCircle className="w-2.5 h-2.5" />
-            Còn {item.inventoryQty}
-          </span>
-        )}
       </div>
 
       <div className="flex items-center justify-between mt-auto">

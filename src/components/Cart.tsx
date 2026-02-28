@@ -280,6 +280,14 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
     // Format ten_mon as a string: "1x CÀ PHÊ ĐEN, 2x TRÀ ĐÀO"
     const ten_mon_str = cart.map(item => `${item.quantity}x ${item.name.toUpperCase()}`).join(', ');
 
+    // Map cart items to backend format
+    const cartForBackend = cart.map(item => ({
+      ma_mon: item.id || (item as any).ma_mon, 
+      so_luong: item.quantity,
+      has_customizations: item.hasCustomizations ?? false,
+      ten_mon: item.name
+    }));
+
     const orderData: OrderData = {
       orderId: ma_don,
       customerName,
@@ -304,7 +312,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       so_ban: tableNumber,
       thanh_toan: paymentMethod,
       so_dien_thoai: phoneNumber,
-      cart_items: cart
+      cart_items: cartForBackend
     };
 
     try {
