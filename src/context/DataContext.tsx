@@ -8,6 +8,7 @@ interface MenuItem {
   category: string;
   isOutOfStock: boolean;
   hasCustomizations: boolean;
+  inventoryQty?: number;
   variants?: Record<string, { id: string; price: number }>;
 }
 
@@ -60,7 +61,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     setError(null);
 
     try {
-      // Fetch Menu and Orders in parallel
+      // Fetch Menu and Orders first (Critical data)
       const [menuRes, ordersRes] = await Promise.all([
         fetch(`${appsScriptUrl}?action=getMenu`),
         fetch(`${appsScriptUrl}?action=getOrders`)
@@ -70,6 +71,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         menuRes.json(),
         ordersRes.json()
       ]);
+
+      // Try to fetch inventory, but don't block if it fails
+      let inventoryData = [];
+      try {
+        const inventoryRes = await fetch(`${appsScriptUrl}?action=getInventoryData`);
+        if (inventoryRes.ok) {
+          const data = await inventoryRes.json();
+          if (Array.isArray(data)) {
+            inventoryData = data;
+          }
+        }
+      } catch (invError) {
+        console.warn('Failed to fetch inventory data:', invError);
+        // Continue without inventory data
+      }
+
+      let inventoryMap = new Map<string, number>();
+      if (Array.isArray(inventoryData) && inventoryData.length > 0) {
+        inventoryData.forEach((item: any) => {
+          const keys = Object.keys(item);
+          const findKey = (patterns: string[]) => keys.find(k => {
+            const lowerK = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return patterns.some(p => lowerK.includes(p.toLowerCase()));
+          });
+          const idKey = findKey(['ma nguyen lieu', 'ma_nguyen_lieu', 'id']) || 'Ma_Nguyen_Lieu';
+          const qtyKey = findKey(['ton kho', 'ton_kho', 'inventory_qty', 'so luong']) || 'Ton_Kho';
+          
+          if (item[idKey] && item[qtyKey] !== undefined) {
+            inventoryMap.set(String(item[idKey]), Number(item[qtyKey]));
+          }
+        });
+      }
 
       if (Array.isArray(menuData)) {
         const mappedMenu = menuData.map((item: any) => {
@@ -86,13 +119,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           const catKey = findKey(['danh muc', 'danh_muc', 'loai', 'nhom', 'category']) || 'Danh_Muc';
           const customKey = findKey(['has customizations', 'has_customizations', 'tuy chinh']) || 'Has_Customizations';
 
+          const id = String(item[idKey] || '');
+          const inventoryQty = inventoryMap.has(id) ? inventoryMap.get(id) : undefined;
+          let isOutOfStock = String(item[stockKey]) === 'false' || item[stockKey] === false;
+          
+          if (inventoryQty !== undefined && inventoryQty <= 0) {
+            isOutOfStock = true;
+          }
+
           return {
-            id: String(item[idKey] || ''),
+            id,
             name: String(item[nameKey] || ''),
             price: Number(item[priceKey] || 0),
             category: String(item[catKey] || 'Khác'),
-            isOutOfStock: String(item[stockKey]) === 'false' || item[stockKey] === false,
-            hasCustomizations: String(item[customKey]) === 'true' || item[customKey] === true
+            isOutOfStock,
+            hasCustomizations: String(item[customKey]) === 'true' || item[customKey] === true,
+            inventoryQty
           };
         });
         setMenuItems(mappedMenu);

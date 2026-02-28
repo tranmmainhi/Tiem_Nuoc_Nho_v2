@@ -14,13 +14,14 @@ import { CartItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
 import { UIProvider, useUI } from './context/UIContext';
 import { DataProvider, useData } from './context/DataContext';
+import { CartProvider, useCart } from './context/CartContext';
 import { RefreshCw, Loader2 } from 'lucide-react';
 
 function AppContent() {
   const location = useLocation();
   const { isFabHidden, setIsFabHidden } = useUI();
   const { isRefreshing, isLoading } = useData();
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const { cart, cartCount, updateQuantity, updateCartItem, clearCart, restoreCart } = useCart();
   const [showNotifications, setShowNotifications] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
@@ -44,59 +45,6 @@ function AppContent() {
     
     return saved || DEFAULT_URL;
   });
-
-  useEffect(() => {
-    const handleAddToCartEvent = (e: any) => {
-      addToCart(e.detail);
-    };
-    window.addEventListener('add-to-cart', handleAddToCartEvent);
-    return () => window.removeEventListener('add-to-cart', handleAddToCartEvent);
-  }, []);
-
-  const addToCart = (item: CartItem) => {
-    setCart((prev) => {
-      const existing = prev.find(
-        (i) =>
-          i.id === item.id &&
-          i.size === item.size &&
-          JSON.stringify(i.toppings) === JSON.stringify(item.toppings) &&
-          i.temperature === item.temperature &&
-          i.sugarLevel === item.sugarLevel &&
-          i.iceLevel === item.iceLevel &&
-          i.note === item.note
-      );
-      if (existing) {
-        return prev.map((i) =>
-          i.cartItemId === existing.cartItemId
-            ? { ...i, quantity: i.quantity + item.quantity }
-            : i
-        );
-      }
-      return [...prev, item];
-    });
-  };
-
-  const updateQuantity = (cartItemId: string, delta: number) => {
-    setCart((prev) =>
-      prev
-        .map((item) =>
-          item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + delta } : item
-        )
-        .filter((item) => item.quantity > 0)
-    );
-  };
-
-  const updateCartItem = (cartItemId: string, updatedItem: CartItem) => {
-    setCart((prev) =>
-      prev.map((item) => (item.cartItemId === cartItemId ? updatedItem : item))
-    );
-  };
-
-  const clearCart = () => setCart([]);
-
-  const restoreCart = (items: CartItem[]) => setCart(items);
-
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const getTitle = () => {
     switch (location.pathname) {
@@ -185,11 +133,6 @@ function AppContent() {
               } />
               <Route path="/cart" element={
                 <Cart
-                  cart={cart}
-                  updateQuantity={updateQuantity}
-                  updateCartItem={updateCartItem}
-                  clearCart={clearCart}
-                  restoreCart={restoreCart}
                   appsScriptUrl={appsScriptUrl}
                   onNavigateSettings={() => {}}
                 />
@@ -288,9 +231,11 @@ export default function App() {
     <ThemeProvider>
       <UIProvider>
         <DataProvider appsScriptUrl={appsScriptUrl}>
-          <HashRouter>
-            <AppContent />
-          </HashRouter>
+          <CartProvider>
+            <HashRouter>
+              <AppContent />
+            </HashRouter>
+          </CartProvider>
         </DataProvider>
       </UIProvider>
     </ThemeProvider>

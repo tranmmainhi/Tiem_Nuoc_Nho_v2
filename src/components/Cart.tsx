@@ -7,19 +7,17 @@ import { SIZES, TOPPINGS } from './Menu';
 import { useUI } from '../context/UIContext';
 import { useData } from '../context/DataContext';
 
+import { useCart } from '../context/CartContext';
+
 interface CartProps {
-  cart: CartItem[];
-  updateQuantity: (id: string, delta: number) => void;
-  updateCartItem: (id: string, updatedItem: CartItem) => void;
-  clearCart: () => void;
-  restoreCart: (items: CartItem[]) => void;
   appsScriptUrl: string;
   onNavigateSettings: () => void;
 }
 
-export function Cart({ cart, updateQuantity, updateCartItem, clearCart, restoreCart, appsScriptUrl, onNavigateSettings }: CartProps) {
+export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
   const { setIsFabHidden } = useUI();
   const { orders, createOrder, fetchAllData } = useData();
+  const { cart, updateQuantity, updateCartItem, clearCart, restoreCart } = useCart();
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [tableNumber, setTableNumber] = useState('');
@@ -38,6 +36,20 @@ export function Cart({ cart, updateQuantity, updateCartItem, clearCart, restoreC
 
   const [aiEmptyState, setAiEmptyState] = useState<{title: string, content: string, button: string, emoji: string} | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+
+  const showToast = (message: string) => {
+    setToast({ message, visible: true });
+    setTimeout(() => setToast({ message: '', visible: false }), 3000);
+  };
+
+  const handleUpdateQuantity = (item: CartItem, delta: number) => {
+    if (delta > 0 && item.inventoryQty !== undefined && item.quantity + delta > item.inventoryQty) {
+      showToast(`Chỉ còn ${item.inventoryQty} sản phẩm trong kho!`);
+      return;
+    }
+    updateQuantity(item.cartItemId, delta);
+  };
 
   const emptyStates = [
     {
@@ -536,13 +548,13 @@ export function Cart({ cart, updateQuantity, updateCartItem, clearCart, restoreC
                   
                   <div className="flex items-center justify-between pt-2 border-t border-stone-50 dark:border-stone-800 mt-2">
                     <div className="flex items-center bg-stone-50 dark:bg-stone-800 rounded-[14px] p-1 border border-stone-100 dark:border-stone-700">
-                      <button onClick={() => updateQuantity(item.cartItemId, -1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Minus className="w-4 h-4" /></button>
+                      <button onClick={() => handleUpdateQuantity(item, -1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Minus className="w-4 h-4" /></button>
                       <span className="w-10 text-center font-black text-sm text-stone-800 dark:text-white">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.cartItemId, 1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Plus className="w-4 h-4" /></button>
+                      <button onClick={() => handleUpdateQuantity(item, 1)} className="w-9 h-9 flex items-center justify-center text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 tap-active bg-white dark:bg-stone-700 rounded-[10px] shadow-sm dark:shadow-none"><Plus className="w-4 h-4" /></button>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setEditingItem(item)} className="w-9 h-9 flex items-center justify-center bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 rounded-[14px] tap-active border border-stone-100 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 hover:text-stone-600 dark:hover:text-stone-300"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => updateQuantity(item.cartItemId, -item.quantity)} className="w-9 h-9 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 rounded-[14px] tap-active border border-red-100 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => handleUpdateQuantity(item, -item.quantity)} className="w-9 h-9 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 rounded-[14px] tap-active border border-red-100 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 </motion.div>
@@ -755,6 +767,27 @@ export function Cart({ cart, updateQuantity, updateCartItem, clearCart, restoreC
             }}
           />
         )}
+
+        {toast.visible && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 left-4 right-4 z-[60]"
+          >
+            <div className="bg-stone-900 dark:bg-white text-white dark:text-black px-6 py-4 rounded-2xl shadow-2xl flex items-center justify-between border border-white/10 dark:border-black/10">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-bold">{toast.message}</span>
+              </div>
+              <button onClick={() => setToast({ ...toast, visible: false })} className="text-stone-400 dark:text-stone-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -767,6 +800,8 @@ function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose:
   const [note, setNote] = useState(item.note || '');
 
   const unitPrice = item.price;
+
+  const hasCustomizations = item.hasCustomizations !== false;
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end justify-center z-[60]">
@@ -784,34 +819,55 @@ function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose:
         </div>
         
         <div className="flex-grow overflow-y-auto px-8 py-6 space-y-10 scrollbar-hide">
-          <div className="grid grid-cols-1 gap-8">
-            <section>
-              <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Nhiệt độ</h4>
-              <div className="flex gap-2">
-                {['Nóng', 'Đá', 'Đá riêng'].map(temp => (
-                  <button
-                    key={temp}
-                    onClick={() => setTemperature(temp)}
-                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all tap-active ${
-                      temperature === temp ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
-                    }`}
-                  >
-                    {temp}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {(temperature === 'Đá') && (
+          {hasCustomizations && (
+            <div className="grid grid-cols-1 gap-8">
               <section>
-                <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đá</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Ít', 'Vừa', 'Bình thường'].map(level => (
+                <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Nhiệt độ</h4>
+                <div className="flex gap-2">
+                  {['Nóng', 'Đá', 'Đá riêng'].map(temp => (
+                    <button
+                      key={temp}
+                      onClick={() => setTemperature(temp)}
+                      className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all tap-active ${
+                        temperature === temp ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                      }`}
+                    >
+                      {temp}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {(temperature === 'Đá') && (
+                <section>
+                  <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đá</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['Ít', 'Vừa', 'Bình thường'].map(level => (
+                      <button
+                        key={level}
+                        onClick={() => setIceLevel(level)}
+                        className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
+                          iceLevel === level ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                        }`}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section>
+                <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đường</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Ít ngọt', 'Vừa', 'Bình thường', 'Ngọt', 'Đường kiêng'].map(level => (
                     <button
                       key={level}
-                      onClick={() => setIceLevel(level)}
+                      onClick={() => setSugarLevel(level === 'Đường kiêng' ? '1 gói đường kiêng' : level)}
                       className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
-                        iceLevel === level ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                        (level === 'Đường kiêng' ? sugarLevel === '1 gói đường kiêng' : sugarLevel === level)
+                          ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' 
+                          : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
                       }`}
                     >
                       {level}
@@ -819,27 +875,8 @@ function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose:
                   ))}
                 </div>
               </section>
-            )}
-
-            <section>
-              <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đường</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {['Ít ngọt', 'Vừa', 'Bình thường', 'Ngọt', 'Đường kiêng'].map(level => (
-                  <button
-                    key={level}
-                    onClick={() => setSugarLevel(level === 'Đường kiêng' ? '1 gói đường kiêng' : level)}
-                    className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
-                      (level === 'Đường kiêng' ? sugarLevel === '1 gói đường kiêng' : sugarLevel === level)
-                        ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' 
-                        : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
-                    }`}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            </section>
-          </div>
+            </div>
+          )}
 
           <section>
             <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Ghi chú</h4>
@@ -857,9 +894,9 @@ function EditCartItemModal({ item, onClose, onSave }: { item: CartItem; onClose:
             onClick={() => onSave({
               ...item,
               unitPrice,
-              temperature,
-              sugarLevel,
-              iceLevel: temperature === 'Đá' ? iceLevel : (temperature === 'Đá riêng' ? 'Bình thường' : undefined),
+              temperature: hasCustomizations ? temperature : undefined,
+              sugarLevel: hasCustomizations ? sugarLevel : undefined,
+              iceLevel: hasCustomizations ? (temperature === 'Đá' ? iceLevel : (temperature === 'Đá riêng' ? 'Bình thường' : undefined)) : undefined,
               note,
             })}
             className="btn-primary shadow-xl shadow-red-200 dark:shadow-red-900/20"

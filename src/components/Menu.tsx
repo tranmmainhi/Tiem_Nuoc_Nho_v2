@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MenuItem, CartItem } from '../types';
 import { useUI } from '../context/UIContext';
 import { useData } from '../context/DataContext';
+import { useCart } from '../context/CartContext';
 
 export const SIZES = [
   { id: 'STD', name: 'Tiêu chuẩn', price: 0 },
@@ -19,11 +20,11 @@ interface MenuProps {
 export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   const { setIsFabHidden } = useUI();
   const { menuItems: rawMenuItems, isLoading, isRefreshing, error, fetchAllData, createOrder } = useData();
+  const { cart, addToCart } = useCart();
 
   const [activeCategory, setActiveCategory] = useState('Tất cả');
   const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [quickAddItem, setQuickAddItem] = useState<{ item: MenuItem, x: number, y: number } | null>(null);
   const [outOfStockItem, setOutOfStockItem] = useState<MenuItem | null>(null);
   const [animatingItemId, setAnimatingItemId] = useState<string | null>(null);
   const [flyingItem, setFlyingItem] = useState<{ x: number; y: number; id: string } | null>(null);
@@ -34,17 +35,6 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Access cart from a higher level or local state if needed, but here we just need addToCart
-  // In the original App.tsx, addToCart was passed as a prop. 
-  // Since I refactored App.tsx to remove it from Menu props, I should probably use a CartContext or just keep it in App.tsx and pass it down.
-  // Wait, I removed it from MenuProps in App.tsx. Let's fix that in App.tsx or use a context.
-  // For now, I'll assume I'll put it in a CartContext or just pass it back.
-  // Actually, the prompt asked for a centralized store. I should probably add cart to DataContext or create a CartContext.
-  // Let's stick to the prompt's "Centralized Store" for Menu, Orders, History.
-  
-  // I'll add addToCart back to MenuProps for now as it's simpler than creating another context unless requested.
-  // Actually, I'll just use the prop from App.tsx. I need to fix App.tsx's Menu usage.
-  
   const menuItems = useMemo(() => {
     const uniqueItemsMap = new Map();
     
@@ -85,9 +75,9 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   }, [rawMenuItems]);
 
   useEffect(() => {
-    setIsFabHidden(!!selectedItem || !!quickAddItem || !!outOfStockItem);
+    setIsFabHidden(!!selectedItem || !!outOfStockItem);
     return () => setIsFabHidden(false);
-  }, [selectedItem, quickAddItem, outOfStockItem, setIsFabHidden]);
+  }, [selectedItem, outOfStockItem, setIsFabHidden]);
 
   const toggleFavorite = (id: string) => {
     setFavorites((prev) => {
@@ -129,14 +119,17 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
     setTimeout(() => setToast({ message: '', visible: false }), 3000);
   };
 
-  // I'll use a custom event or just pass it down. 
-  // Let's assume the user wants to keep the cart in App.tsx for now.
-  // I'll use a window event to communicate with the cart in App.tsx.
-  const addToCart = (item: CartItem) => {
-    window.dispatchEvent(new CustomEvent('add-to-cart', { detail: item }));
+  const getCartQuantity = (itemId: string) => {
+    return cart.filter(c => c.id === itemId).reduce((sum, c) => sum + c.quantity, 0);
   };
 
   const handleAddToCart = (cartItem: CartItem, e?: React.MouseEvent) => {
+    const currentQty = getCartQuantity(cartItem.id);
+    if (cartItem.inventoryQty !== undefined && currentQty + cartItem.quantity > cartItem.inventoryQty) {
+      showToast(`Chỉ còn ${cartItem.inventoryQty} sản phẩm trong kho!`);
+      return;
+    }
+
     addToCart(cartItem);
     setSelectedItem(null);
     setAnimatingItemId(cartItem.id);
@@ -151,6 +144,12 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   };
 
   const performAddDirectly = (item: MenuItem, type?: 'Mang về' | 'Tại chỗ', x?: number, y?: number) => {
+    const currentQty = getCartQuantity(item.id);
+    if (item.inventoryQty !== undefined && currentQty + 1 > item.inventoryQty) {
+      showToast(`Chỉ còn ${item.inventoryQty} sản phẩm trong kho!`);
+      return;
+    }
+
     addToCart({
       ...item,
       cartItemId: Math.random().toString(36).substr(2, 9),
@@ -167,7 +166,7 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
       setTimeout(() => setFlyingItem(null), 800);
     }
 
-    showToast(`Đã thêm ${item.name} (${type || 'Mặc định'}) vào giỏ hàng`);
+    showToast(`Đã thêm ${item.name} vào giỏ hàng`);
     setTimeout(() => setAnimatingItemId(null), 1000);
   };
 
@@ -311,8 +310,20 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
             >
               <MenuItemCard 
                 item={item} 
-                onOpenModal={() => setSelectedItem(item)} 
-                onAddQuick={(e) => setQuickAddItem({ item, x: e.clientX, y: e.clientY })}
+                onOpenModal={() => {
+                  if (item.hasCustomizations === false) {
+                    performAddDirectly(item);
+                  } else {
+                    setSelectedItem(item);
+                  }
+                }} 
+                onAddQuick={(e) => {
+                  if (item.hasCustomizations === false) {
+                    performAddDirectly(item, undefined, e.clientX, e.clientY);
+                  } else {
+                    setSelectedItem(item);
+                  }
+                }}
                 onOutOfStockClick={() => setOutOfStockItem(item)}
                 isAnimating={animatingItemId === item.id}
                 isFavorite={favorites.includes(item.id)}
@@ -337,19 +348,10 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
         {selectedItem && (
           <CustomizationModal 
             item={selectedItem} 
+            currentQty={getCartQuantity(selectedItem.id)}
             onClose={() => setSelectedItem(null)} 
             onAdd={handleAddToCart} 
-          />
-        )}
-
-        {quickAddItem && (
-          <QuickAddPanel 
-            item={quickAddItem.item}
-            onClose={() => setQuickAddItem(null)}
-            onAdd={(type) => {
-              performAddDirectly(quickAddItem.item, type, quickAddItem.x, quickAddItem.y);
-              setQuickAddItem(null);
-            }}
+            showToast={showToast}
           />
         )}
 
@@ -498,7 +500,7 @@ const MenuItemCard: React.FC<{
     <motion.div 
       whileTap={{ scale: 0.98 }}
       onClick={() => item.isOutOfStock ? onOutOfStockClick() : onOpenModal()}
-      className={`group relative bg-white dark:bg-stone-900 rounded-[28px] p-4 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-xl hover:shadow-stone-200/50 dark:hover:shadow-none transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60 grayscale' : ''}`}
+      className={`group relative bg-white dark:bg-stone-900 rounded-[28px] p-4 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-xl hover:shadow-stone-200/50 dark:hover:shadow-none transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-50 grayscale pointer-events-none' : ''}`}
     >
       {item.isOutOfStock && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-black/60 backdrop-blur-[2px]">
@@ -525,9 +527,16 @@ const MenuItemCard: React.FC<{
         <h3 className="font-bold text-stone-800 dark:text-white text-[15px] leading-snug line-clamp-2 min-h-[2.5rem] group-hover:text-[#C9252C] transition-colors">
           {item.name}
         </h3>
-        <p className="text-stone-400 dark:text-stone-500 text-xs font-medium line-clamp-1">
-          {item.category}
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-stone-400 dark:text-stone-500 text-xs font-medium line-clamp-1">
+            {item.category}
+          </p>
+          {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
+            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full">
+              Chỉ còn {item.inventoryQty}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-stone-50 dark:border-stone-800/50">
@@ -558,58 +567,7 @@ const MenuItemCard: React.FC<{
   );
 };
 
-const QuickAddPanel: React.FC<{ 
-  item: MenuItem; 
-  onClose: () => void; 
-  onAdd: (type: 'Mang về' | 'Tại chỗ') => void 
-}> = ({ item, onClose, onAdd }) => {
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end justify-center z-50" onClick={onClose}>
-      <motion.div 
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-stone-900 rounded-t-[40px] w-full p-8 shadow-2xl space-y-6 border-t border-stone-100 dark:border-stone-800 max-w-lg"
-      >
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-2xl font-black text-stone-800 dark:text-white">Chọn hình thức</h3>
-            <p className="text-stone-400 dark:text-stone-500 font-medium text-sm">{item.name}</p>
-          </div>
-          <button onClick={onClose} className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-1 gap-3">
-          <button 
-            onClick={() => onAdd('Mang về')}
-            className="w-full py-5 bg-[#C9252C] text-white font-black rounded-2xl shadow-xl shadow-red-100 dark:shadow-none tap-active text-lg tracking-wider"
-          >
-            MANG VỀ
-          </button>
-          <button 
-            onClick={() => onAdd('Tại chỗ')}
-            className="w-full py-5 bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-white font-black rounded-2xl border border-stone-200 dark:border-stone-700 tap-active text-lg tracking-wider"
-          >
-            TẠI CHỖ
-          </button>
-        </div>
-        
-        <button 
-          onClick={onClose}
-          className="w-full py-2 text-stone-400 dark:text-stone-500 font-bold uppercase tracking-widest text-[10px]"
-        >
-          Đóng
-        </button>
-      </motion.div>
-    </div>
-  );
-};
-
-const CustomizationModal: React.FC<{ item: MenuItem; onClose: () => void; onAdd: (item: CartItem, e: React.MouseEvent) => void }> = ({ item, onClose, onAdd }) => {
+const CustomizationModal: React.FC<{ item: MenuItem; currentQty: number; onClose: () => void; onAdd: (item: CartItem, e: React.MouseEvent) => void; showToast: (msg: string) => void }> = ({ item, currentQty, onClose, onAdd, showToast }) => {
   const [quantity, setQuantity] = useState(1);
   const [temperature, setTemperature] = useState('Đá');
   const [sugarLevel, setSugarLevel] = useState('Bình thường');
@@ -625,7 +583,7 @@ const CustomizationModal: React.FC<{ item: MenuItem; onClose: () => void; onAdd:
     return null;
   };
 
-  const currentVariant = hasCustomizations ? getVariant(temperature) : null;
+  const currentVariant = getVariant(temperature);
   const basePrice = currentVariant ? currentVariant.price : item.price;
   const baseId = currentVariant ? currentVariant.id : item.id;
 
@@ -644,7 +602,7 @@ const CustomizationModal: React.FC<{ item: MenuItem; onClose: () => void; onAdd:
         <div className="px-8 py-6 flex justify-between items-center border-b border-stone-50 dark:border-stone-800">
           <div>
             <h2 className="text-2xl font-black text-stone-800 dark:text-white">
-              {hasCustomizations ? 'Tùy chỉnh' : 'Thêm vào giỏ'}
+              Tùy chỉnh
             </h2>
             <p className="text-stone-400 dark:text-stone-500 font-medium text-sm">{item.name}</p>
           </div>
@@ -654,84 +612,73 @@ const CustomizationModal: React.FC<{ item: MenuItem; onClose: () => void; onAdd:
         </div>
         
         <div className="flex-grow overflow-y-auto px-8 py-6 space-y-10 scrollbar-hide">
-          {hasCustomizations ? (
-            <>
-              <div className="grid grid-cols-1 gap-8">
-                <section>
-                  <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Nhiệt độ</h4>
-                  <div className="flex gap-2">
-                    {['Nóng', 'Đá', 'Đá riêng'].map(temp => (
-                      <button
-                        key={temp}
-                        onClick={() => setTemperature(temp)}
-                        className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all tap-active ${
-                          temperature === temp ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
-                        }`}
-                      >
-                        {temp}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                {(temperature === 'Đá') && (
-                  <section>
-                    <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đá</h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['Ít', 'Vừa', 'Bình thường'].map(level => (
-                        <button
-                          key={level}
-                          onClick={() => setIceLevel(level)}
-                          className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
-                            iceLevel === level ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
-                          }`}
-                        >
-                          {level}
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                <section>
-                  <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đường</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Ít ngọt', 'Vừa', 'Bình thường', 'Ngọt', 'Đường kiêng'].map(level => (
-                      <button
-                        key={level}
-                        onClick={() => setSugarLevel(level === 'Đường kiêng' ? '1 gói đường kiêng' : level)}
-                        className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
-                          (level === 'Đường kiêng' ? sugarLevel === '1 gói đường kiêng' : sugarLevel === level)
-                            ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' 
-                            : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
-                        }`}
-                      >
-                        {level}
-                      </button>
-                    ))}
-                  </div>
-                </section>
+          <div className="grid grid-cols-1 gap-8">
+            <section>
+              <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Nhiệt độ</h4>
+              <div className="flex gap-2">
+                {['Nóng', 'Đá', 'Đá riêng'].map(temp => (
+                  <button
+                    key={temp}
+                    onClick={() => setTemperature(temp)}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all tap-active ${
+                      temperature === temp ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                    }`}
+                  >
+                    {temp}
+                  </button>
+                ))}
               </div>
+            </section>
 
+            {(temperature === 'Đá') && (
               <section>
-                <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Ghi chú</h4>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ví dụ: Không lấy ống hút..."
-                  className="input-field p-5 rounded-[24px] resize-none text-sm font-medium"
-                  rows={2}
-                />
+                <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đá</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {['Ít', 'Vừa', 'Bình thường'].map(level => (
+                    <button
+                      key={level}
+                      onClick={() => setIceLevel(level)}
+                      className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
+                        iceLevel === level ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
               </section>
-            </>
-          ) : (
-            <div className="py-10 text-center">
-              <div className="w-20 h-20 bg-stone-50 dark:bg-stone-800 rounded-[32px] flex items-center justify-center mx-auto mb-4 text-stone-300 dark:text-stone-600">
-                <Package className="w-10 h-10" />
+            )}
+
+            <section>
+              <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Lượng đường</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {['Ít ngọt', 'Vừa', 'Bình thường', 'Ngọt', 'Đường kiêng'].map(level => (
+                  <button
+                    key={level}
+                    onClick={() => setSugarLevel(level === 'Đường kiêng' ? '1 gói đường kiêng' : level)}
+                    className={`py-2.5 rounded-xl font-bold text-xs border-2 transition-all tap-active ${
+                      (level === 'Đường kiêng' ? sugarLevel === '1 gói đường kiêng' : sugarLevel === level)
+                        ? 'border-[#C9252C] bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-300' 
+                        : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
               </div>
-              <p className="text-stone-500 dark:text-stone-400 font-medium">Sản phẩm này không có tùy chọn bổ sung</p>
-            </div>
-          )}
+            </section>
+          </div>
+
+          <section>
+            <h4 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-4">Ghi chú</h4>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ví dụ: Không lấy ống hút..."
+              className="input-field p-5 rounded-[24px] resize-none text-sm font-medium"
+              rows={2}
+            />
+          </section>
         </div>
 
         <div className="p-8 bg-white dark:bg-stone-900 border-t border-stone-50 dark:border-stone-800 space-y-6">
@@ -739,7 +686,18 @@ const CustomizationModal: React.FC<{ item: MenuItem; onClose: () => void; onAdd:
             <div className="flex items-center bg-stone-50 dark:bg-stone-800 rounded-2xl p-1 border border-stone-100 dark:border-stone-700">
               <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active"><Minus className="w-5 h-5" /></button>
               <span className="w-10 text-center font-black text-xl text-stone-800 dark:text-white">{quantity}</span>
-              <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-10 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active"><Plus className="w-5 h-5" /></button>
+              <button 
+                onClick={() => {
+                  if (item.inventoryQty !== undefined && currentQty + quantity + 1 > item.inventoryQty) {
+                    showToast(`Chỉ còn ${item.inventoryQty} sản phẩm trong kho!`);
+                    return;
+                  }
+                  setQuantity(quantity + 1);
+                }} 
+                className="w-10 h-10 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
             </div>
             <div className="text-right">
               <p className="text-stone-400 dark:text-stone-500 text-xs font-bold uppercase tracking-widest mb-1">Tổng cộng</p>
@@ -756,10 +714,10 @@ const CustomizationModal: React.FC<{ item: MenuItem; onClose: () => void; onAdd:
               size: "Tiêu chuẩn",
               toppings: [],
               unitPrice: finalUnitPrice,
-              temperature: hasCustomizations ? temperature : undefined,
-              sugarLevel: hasCustomizations ? sugarLevel : undefined,
-              iceLevel: hasCustomizations ? (temperature === 'Đá' ? iceLevel : (temperature === 'Đá riêng' ? 'Bình thường' : undefined)) : undefined,
-              note: hasCustomizations ? note : undefined,
+              temperature: temperature,
+              sugarLevel: sugarLevel,
+              iceLevel: temperature === 'Đá' ? iceLevel : (temperature === 'Đá riêng' ? 'Bình thường' : undefined),
+              note: note,
             }, e)}
             className="btn-primary shadow-xl shadow-red-200 dark:shadow-red-900/20"
           >

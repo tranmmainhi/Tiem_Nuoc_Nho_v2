@@ -5,6 +5,7 @@ export interface MenuItem {
   category: string;
   isOutOfStock?: boolean;
   hasCustomizations?: boolean;
+  inventoryQty?: number;
   variants?: {
     [key: string]: {
       id: string;
