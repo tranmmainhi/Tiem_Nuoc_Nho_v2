@@ -14,6 +14,7 @@ interface MenuItem {
   danh_muc: string;
   co_san: boolean;
   has_customizations: boolean;
+  inventoryQty?: number;
 }
 
 export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
@@ -30,7 +31,8 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
       gia_ban: item.price,
       danh_muc: item.category,
       co_san: !item.isOutOfStock,
-      has_customizations: item.hasCustomizations
+      has_customizations: item.hasCustomizations,
+      inventoryQty: item.inventoryQty
     }));
   }, [rawMenuItems]);
   
@@ -242,9 +244,9 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                 </span>
               </div>
               <div className="grid gap-3">
-                {items.map((item) => (
+                {items.map((item, idx) => (
                   <div 
-                    key={item.ma_mon} 
+                    key={`${item.ma_mon}-${idx}`} 
                     className={`bg-white dark:bg-stone-900 p-5 rounded-[28px] border border-stone-100 dark:border-stone-800 shadow-sm flex justify-between items-center transition-all duration-300 ${!item.co_san ? 'opacity-60' : ''}`}
                   >
                     <div className="min-w-0 flex-1 pr-4">
@@ -260,6 +262,12 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                         {item.has_customizations && (
                           <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 uppercase tracking-wider border border-emerald-100 dark:border-emerald-900/30">
                             Có Tùy Chỉnh
+                          </span>
+                        )}
+                        {item.inventoryQty !== undefined && item.inventoryQty <= 5 && item.inventoryQty > 0 && (
+                          <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 uppercase tracking-wider border border-amber-100 dark:border-amber-900/30 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            Còn {item.inventoryQty}
                           </span>
                         )}
                       </div>

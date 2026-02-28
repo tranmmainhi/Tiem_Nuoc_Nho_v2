@@ -303,17 +303,19 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       ten_khach_hang: customerName,
       so_ban: tableNumber,
       thanh_toan: paymentMethod,
-      so_dien_thoai: phoneNumber
+      so_dien_thoai: phoneNumber,
+      cart_items: cart
     };
 
     try {
-      const success = await createOrder(payload);
+      const success = await createOrder(payload, false);
 
       if (!success) {
         throw new Error('Có lỗi xảy ra khi gửi đơn hàng.');
       }
 
       setSubmitStatus('success');
+      showToast('Tạo đơn thành công! Kho đã được cập nhật.');
       
       clearCart();
       setCustomerName('');
@@ -333,6 +335,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       localStorage.setItem('sync_error', 'true');
       setErrorMessage(error.message || 'Có lỗi xảy ra khi gửi đơn hàng. Vui lòng thử lại.');
       setSubmitStatus('error');
+      showToast('Hệ thống bận, chưa thể chốt đơn. Vui lòng thử lại!');
     } finally {
       setIsSubmitting(false);
     }
@@ -723,7 +726,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
                     className="absolute inset-0 bg-white/30 rounded-full"
                   />
                 </div>
-                <span>Đang gửi đơn...</span>
+                <span>Đang xử lý...</span>
               </motion.div>
             ) : (
               <motion.div

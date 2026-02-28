@@ -12,9 +12,16 @@ interface MenuItem {
   variants?: Record<string, { id: string; price: number }>;
 }
 
+interface InventoryItem {
+  id: string;
+  name: string;
+  quantity: number;
+}
+
 interface DataContextType {
   menuItems: MenuItem[];
   orders: OrderData[];
+  inventoryItems: InventoryItem[];
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -22,7 +29,7 @@ interface DataContextType {
   setRefreshInterval: (interval: number) => void;
   fetchAllData: (showFullLoader?: boolean) => Promise<void>;
   updateOrderStatus: (orderId: string, status: string, paymentStatus?: string) => Promise<boolean>;
-  createOrder: (orderData: any) => Promise<boolean>;
+  createOrder: (orderData: any, showLoader?: boolean) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -30,6 +37,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: string }> = ({ children, appsScriptUrl }) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,24 +71,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     try {
       // Fetch Menu and Orders first (Critical data)
       const [menuRes, ordersRes] = await Promise.all([
-        fetch(`${appsScriptUrl}?action=getMenu`),
-        fetch(`${appsScriptUrl}?action=getOrders`)
+        fetch(`${appsScriptUrl}?action=getMenu`, { credentials: 'omit' }),
+        fetch(`${appsScriptUrl}?action=getOrders`, { credentials: 'omit' })
       ]);
 
-      const [menuData, ordersData] = await Promise.all([
+      const [menuJson, ordersJson] = await Promise.all([
         menuRes.json(),
         ordersRes.json()
       ]);
 
+      // Handle new API structure: { status: "success", data: [...] }
+      const menuData = (menuJson && typeof menuJson === 'object' && Array.isArray(menuJson.data)) 
+        ? menuJson.data 
+        : (Array.isArray(menuJson) ? menuJson : []);
+
+      const ordersData = (ordersJson && typeof ordersJson === 'object' && Array.isArray(ordersJson.data))
+        ? ordersJson.data
+        : (Array.isArray(ordersJson) ? ordersJson : []);
+
       // Try to fetch inventory, but don't block if it fails
       let inventoryData = [];
       try {
-        const inventoryRes = await fetch(`${appsScriptUrl}?action=getInventoryData`);
+        const inventoryRes = await fetch(`${appsScriptUrl}?action=getInventoryData`, { credentials: 'omit' });
         if (inventoryRes.ok) {
-          const data = await inventoryRes.json();
-          if (Array.isArray(data)) {
-            inventoryData = data;
-          }
+          const invJson = await inventoryRes.json();
+          // Handle new API structure for inventory too
+          inventoryData = (invJson && typeof invJson === 'object' && Array.isArray(invJson.data))
+            ? invJson.data
+            : (Array.isArray(invJson) ? invJson : []);
         }
       } catch (invError) {
         console.warn('Failed to fetch inventory data:', invError);
@@ -88,6 +106,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       }
 
       let inventoryMap = new Map<string, number>();
+      let mappedInventoryItems: InventoryItem[] = [];
+
       if (Array.isArray(inventoryData) && inventoryData.length > 0) {
         inventoryData.forEach((item: any) => {
           const keys = Object.keys(item);
@@ -97,11 +117,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           });
           const idKey = findKey(['ma nguyen lieu', 'ma_nguyen_lieu', 'id']) || 'Ma_Nguyen_Lieu';
           const qtyKey = findKey(['ton kho', 'ton_kho', 'inventory_qty', 'so luong']) || 'Ton_Kho';
+          const nameKey = findKey(['ten nguyen lieu', 'ten_nguyen_lieu', 'name']) || 'Ten_Nguyen_Lieu';
           
           if (item[idKey] && item[qtyKey] !== undefined) {
             inventoryMap.set(String(item[idKey]), Number(item[qtyKey]));
+            mappedInventoryItems.push({
+              id: String(item[idKey]),
+              name: String(item[nameKey] || item[idKey]),
+              quantity: Number(item[qtyKey])
+            });
           }
         });
+        setInventoryItems(mappedInventoryItems);
       }
 
       if (Array.isArray(menuData)) {
@@ -120,6 +147,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           const customKey = findKey(['has customizations', 'has_customizations', 'tuy chinh']) || 'Has_Customizations';
 
           const id = String(item[idKey] || '');
+          const name = String(item[nameKey] || '');
+          
+          // Skip items without a name
+          if (!name) return null;
+
           const inventoryQty = inventoryMap.has(id) ? inventoryMap.get(id) : undefined;
           let isOutOfStock = String(item[stockKey]) === 'false' || item[stockKey] === false;
           
@@ -129,14 +161,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
 
           return {
             id,
-            name: String(item[nameKey] || ''),
+            name,
             price: Number(item[priceKey] || 0),
             category: String(item[catKey] || 'Khác'),
             isOutOfStock,
             hasCustomizations: String(item[customKey]) === 'true' || item[customKey] === true,
             inventoryQty
           };
-        });
+        }).filter((item) => item !== null) as MenuItem[];
         setMenuItems(mappedMenu);
       }
 
@@ -203,9 +235,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     }
   };
 
-  const createOrder = async (orderData: any) => {
+  const createOrder = async (orderData: any, showLoader = true) => {
     if (!appsScriptUrl) return false;
-    setIsLoading(true);
+    if (showLoader) setIsLoading(true);
     try {
       const response = await fetch(appsScriptUrl, {
         method: 'POST',
@@ -221,7 +253,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     } catch (err) {
       return false;
     } finally {
-      setIsLoading(false);
+      if (showLoader) setIsLoading(false);
     }
   };
 
@@ -229,6 +261,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     <DataContext.Provider value={{ 
       menuItems, 
       orders, 
+      inventoryItems,
       isLoading, 
       isRefreshing, 
       error, 

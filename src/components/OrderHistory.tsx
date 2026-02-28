@@ -268,11 +268,14 @@ export function OrderHistory() {
       <div className="space-y-4">
         <AnimatePresence mode="popLayout">
           {filteredOrders.length === 0 ? (
-            <div className="text-center py-20 flex flex-col items-center justify-center">
-              <div className="w-16 h-16 bg-stone-50 dark:bg-stone-800 rounded-[24px] flex items-center justify-center mb-4 text-stone-300 dark:text-stone-600">
-                <Package className="w-8 h-8" />
+            <div className="text-center py-20 flex flex-col items-center justify-center px-6">
+              <div className="w-20 h-20 bg-stone-50 dark:bg-stone-800 rounded-[32px] flex items-center justify-center mb-6 text-stone-300 dark:text-stone-600 shadow-sm animate-float">
+                <Package className="w-10 h-10" />
               </div>
-              <p className="text-stone-400 dark:text-stone-500 font-bold">Không có đơn hàng nào</p>
+              <h3 className="text-stone-800 dark:text-white font-black text-lg mb-2">Chưa có đơn hàng nào</h3>
+              <p className="text-stone-400 dark:text-stone-500 font-medium text-sm max-w-[250px] leading-relaxed">
+                Không tìm thấy đơn hàng trong khoảng thời gian này. Thử chọn mốc thời gian khác xem sao nhé!
+              </p>
             </div>
           ) : (
             filteredOrders.map((order, index) => (

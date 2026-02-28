@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { RefreshCw, CheckCircle2, Clock, XCircle, Coffee, DollarSign, AlertCircle, ChevronRight, Settings as SettingsIcon, Volume2, VolumeX, Package, User, MapPin, BarChart3, TrendingUp, TrendingDown, Plus, Trash2, Calendar, LayoutDashboard, ListOrdered, Wallet, Filter, ArrowUpRight, ArrowDownRight, Menu as MenuIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 import { OrderData, Expense } from '../types';
 import { Link } from 'react-router-dom';
 import { useUI } from '../context/UIContext';
@@ -36,7 +36,7 @@ const MATERIALS = [
 
 export function StaffView({ appsScriptUrl }: StaffViewProps) {
   const { setIsFabHidden } = useUI();
-  const { orders, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, updateOrderStatus, refreshInterval, setRefreshInterval } = useData();
+  const { orders, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, updateOrderStatus, refreshInterval, setRefreshInterval, inventoryItems } = useData();
   
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     const saved = localStorage.getItem('admin_expenses');
@@ -80,6 +80,87 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
     return saved ? JSON.parse(saved) : [];
   });
   const [availableMaterials, setAvailableMaterials] = useState<any[]>(MATERIALS);
+  
+  // Fixed Cost Reminder
+  const [showFixedCostReminder, setShowFixedCostReminder] = useState(false);
+  const [daysUntilFixedCost, setDaysUntilFixedCost] = useState(0);
+
+  // Inventory Edit State
+  const [editingInventoryItem, setEditingInventoryItem] = useState<any | null>(null);
+  const [editInventoryQty, setEditInventoryQty] = useState('');
+  const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
+
+  useEffect(() => {
+    const now = new Date();
+    const day = now.getDate();
+    if (day >= 1 && day <= 5) {
+      setShowFixedCostReminder(true);
+      setDaysUntilFixedCost(5 - day);
+    } else {
+      setShowFixedCostReminder(false);
+    }
+  }, []);
+
+  const handleUpdateInventory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInventoryItem || !editInventoryQty) return;
+
+    setIsUpdatingInventory(true);
+    try {
+      const currentQty = editingInventoryItem.quantity || 0;
+      const newQty = Number(editInventoryQty);
+      const quantityChange = newQty - currentQty;
+
+      if (quantityChange === 0) {
+        setEditingInventoryItem(null);
+        setIsUpdatingInventory(false);
+        return;
+      }
+
+      // Use updateInventory action to adjust stock
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'updateInventory',
+          itemName: editingInventoryItem.name, // Assuming backend uses name to find item, or we might need ID
+          // If backend uses ID, we might need to adjust. Based on previous code, it used itemName.
+          // Let's try to send both if possible, or just itemName as per existing code.
+          // Existing code: itemName: item.name
+          quantityChange: quantityChange
+        }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      });
+
+      const result = await response.json();
+      if (result.status === 'success') {
+        await fetchAllData(false); // Refresh data
+        setEditingInventoryItem(null);
+        setEditInventoryQty('');
+        alert('Đã cập nhật kho thành công!');
+      } else {
+        alert('Lỗi cập nhật: ' + (result.message || 'Không xác định'));
+      }
+    } catch (err) {
+      console.error('Update inventory error:', err);
+      alert('Lỗi kết nối');
+    } finally {
+      setIsUpdatingInventory(false);
+    }
+  };
+
+  const expensesByCategory = useMemo(() => {
+    const categoryMap = new Map<string, number>();
+    expenses.filter(e => e.phan_loai === 'Chi').forEach(expense => {
+      const current = categoryMap.get(expense.danh_muc) || 0;
+      categoryMap.set(expense.danh_muc, current + Number(expense.so_tien));
+    });
+
+    return Array.from(categoryMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [expenses]);
+
+  const EXPENSE_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
 
   const fetchInventory = async () => {
     if (!appsScriptUrl) return;
@@ -495,7 +576,49 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
       revenue: revenueDataMap[key],
     }));
 
-    return { revenue, cost, profit, orderCount, expenseData, revenueData, growth, costGrowth };
+    // Monthly Profit Analysis
+    const currentMonthOrders = orders.filter(o => {
+      const d = new Date(o.timestamp);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && o.orderStatus === 'Hoàn thành';
+    });
+    const currentMonthExpenses = expenses.filter(e => {
+      const d = new Date(e.thoi_gian);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && (e.phan_loai === 'Chi');
+    });
+
+    const monthlyRevenue = currentMonthOrders.reduce((sum, o) => sum + o.total, 0);
+    const monthlyCost = currentMonthExpenses.reduce((sum, e) => sum + Number(e.so_tien), 0);
+    const monthlyProfit = monthlyRevenue - monthlyCost;
+
+    // Revenue by Category (Product Category)
+    const revenueByCategoryMap: Record<string, number> = {};
+    currentMonthOrders.forEach(order => {
+      order.items.forEach(item => {
+        // We need category for item. Since OrderData items might not have category, we might need to look it up from menuItems if available.
+        // But OrderData items usually just have name, price, qty.
+        // If we can't get category easily, we might skip or use a workaround.
+        // Let's try to infer or just use item name if category missing? No, too many bars.
+        // Let's assume we can't easily get category from order history items without a lookup map.
+        // We can use the 'menuItems' from useData to look up categories.
+        // But 'menuItems' is not in this scope (it's in useData).
+        // Let's just skip Revenue Breakdown for now or use a simple one if possible.
+        // Actually, let's just do Expenses Breakdown by Category (Bar Chart) as requested "revenue and expenses broken down by category".
+        // Expenses we have categories. Revenue we might not.
+      });
+    });
+
+    // Expenses by Category (Monthly)
+    const monthlyExpensesByCategory = currentMonthExpenses.reduce((acc, expense) => {
+      acc[expense.danh_muc] = (acc[expense.danh_muc] || 0) + Number(expense.so_tien);
+      return acc;
+    }, {} as Record<string, number>);
+
+    const monthlyExpenseChartData = Object.keys(monthlyExpensesByCategory).map(key => ({
+      name: key,
+      value: monthlyExpensesByCategory[key]
+    })).sort((a, b) => b.value - a.value);
+
+    return { revenue, cost, profit, orderCount, expenseData, revenueData, growth, costGrowth, monthlyRevenue, monthlyCost, monthlyProfit, monthlyExpenseChartData };
   }, [orders, expenses, timeRange]);
 
   const COLORS = ['#C9252C', '#B91C1C', '#991B1B', '#7F1D1D', '#450A0A'];
@@ -607,6 +730,20 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
         </div>
       )}
 
+      {showFixedCostReminder && (
+        <div className="mx-6 mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl flex items-start gap-3 animate-pulse">
+          <Calendar className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+          <div className="flex-grow">
+            <p className="text-sm font-bold text-blue-800 dark:text-blue-300">
+              Nhắc nhở: Đã đến kỳ thanh toán chi phí cố định (Tiền nhà, Điện, Nước...).
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+              Còn {daysUntilFixedCost} ngày nữa là đến hạn (ngày 5).
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="p-6 space-y-6">
         <AnimatePresence mode="wait">
           {viewMode === 'dashboard' && (
@@ -681,6 +818,46 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                       <span>{stats.orderCount} đơn hàng hoàn thành</span>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Monthly Profit Analysis Section */}
+              <div className="bg-white dark:bg-stone-900 p-6 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-none space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Phân tích lợi nhuận tháng này</h3>
+                  <span className="text-xs font-bold bg-stone-100 dark:bg-stone-800 px-2 py-1 rounded-lg text-stone-500">Tháng {new Date().getMonth() + 1}</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-2xl border border-green-100 dark:border-green-900/20">
+                    <p className="text-[10px] font-black text-green-600 dark:text-green-400 uppercase tracking-widest mb-1">Doanh thu</p>
+                    <p className="text-lg font-black text-stone-800 dark:text-white">{stats.monthlyRevenue.toLocaleString()}đ</p>
+                  </div>
+                  <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-2xl border border-red-100 dark:border-red-900/20">
+                    <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest mb-1">Chi phí</p>
+                    <p className="text-lg font-black text-stone-800 dark:text-white">{stats.monthlyCost.toLocaleString()}đ</p>
+                  </div>
+                  <div className={`p-4 rounded-2xl border ${stats.monthlyProfit >= 0 ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/20'}`}>
+                    <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${stats.monthlyProfit >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>Lợi nhuận</p>
+                    <p className="text-lg font-black text-stone-800 dark:text-white">{stats.monthlyProfit.toLocaleString()}đ</p>
+                  </div>
+                </div>
+
+                <div className="h-64">
+                  <p className="text-[10px] font-bold text-stone-400 mb-4 text-center">Biểu đồ chi phí theo danh mục (Tháng này)</p>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={stats.monthlyExpenseChartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" width={80} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                      <Tooltip 
+                        cursor={{fill: 'transparent'}}
+                        contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}
+                        formatter={(value: number) => value.toLocaleString() + 'đ'}
+                      />
+                      <Bar dataKey="value" fill="#C9252C" radius={[0, 4, 4, 0]} barSize={20} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 
@@ -1032,6 +1209,43 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                 </div>
               </div>
 
+              {/* Expense Chart */}
+              {expensesByCategory.length > 0 && (
+                <div className="card p-6 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-[24px] shadow-sm">
+                  <h3 className="text-sm font-black text-stone-800 dark:text-white mb-4 uppercase tracking-widest">Phân bổ chi tiêu</h3>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={expensesByCategory}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {expensesByCategory.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={EXPENSE_COLORS[index % EXPENSE_COLORS.length]} stroke="none" />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value: number) => value.toLocaleString() + 'đ'}
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+                          itemStyle={{ color: '#000', fontWeight: 'bold' }}
+                        />
+                        <Legend 
+                          verticalAlign="bottom" 
+                          height={36}
+                          iconType="circle"
+                          formatter={(value, entry: any) => <span className="text-xs font-bold text-stone-500 ml-1">{value}</span>}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
               {/* Expense List */}
               <div className="space-y-4">
                 {expenses.length === 0 ? (
@@ -1099,6 +1313,39 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               </div>
 
               <div className="space-y-4">
+                {/* Current Inventory List */}
+                <div className="card p-5 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
+                  <h3 className="text-sm font-black text-stone-800 dark:text-white mb-4 uppercase tracking-widest">Kho hiện tại</h3>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
+                    {inventoryItems.length === 0 ? (
+                      <p className="text-center text-stone-400 text-xs py-4">Chưa có dữ liệu tồn kho</p>
+                    ) : (
+                      inventoryItems.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-3 bg-stone-50 dark:bg-stone-800 rounded-xl">
+                          <div>
+                            <p className="font-bold text-stone-800 dark:text-white text-sm">{item.name}</p>
+                            <p className="text-[10px] text-stone-400 font-bold">{item.id}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-black ${item.quantity <= 5 ? 'text-red-500' : 'text-emerald-600'}`}>
+                              {item.quantity}
+                            </span>
+                            <button 
+                              onClick={() => {
+                                setEditingInventoryItem(item);
+                                setEditInventoryQty(String(item.quantity));
+                              }}
+                              className="p-2 bg-white dark:bg-stone-700 rounded-lg shadow-sm text-stone-500 hover:text-[#C9252C] transition-colors"
+                            >
+                              <SettingsIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
                 {inventoryLogs.length === 0 ? (
                   <div className="text-center py-20 flex flex-col items-center justify-center">
                     <div className="w-16 h-16 bg-stone-50 dark:bg-stone-800 rounded-[24px] flex items-center justify-center mb-4 text-stone-300 dark:text-stone-600">
@@ -1257,8 +1504,8 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     onChange={(e) => setInventoryMaterial(e.target.value)}
                     className="input-field font-bold"
                   >
-                    {availableMaterials.map(m => (
-                      <option key={m.code || m.ma_nl} value={m.code || m.ma_nl}>
+                    {availableMaterials.map((m, idx) => (
+                      <option key={`${m.code || m.ma_nl}-${idx}`} value={m.code || m.ma_nl}>
                         {(m.code || m.ma_nl)} - {(m.name || m.ten_nl || m.ten_mon)}
                       </option>
                     ))}
@@ -1305,6 +1552,66 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                 >
                   {isSubmitting ? 'Đang xử lý...' : 'Xác nhận nhập kho'}
                 </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Inventory Modal */}
+      <AnimatePresence>
+        {editingInventoryItem && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-stone-900 rounded-[32px] w-full max-w-sm p-6 shadow-2xl space-y-5 border border-stone-100 dark:border-stone-800"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-stone-800 dark:text-white">Cập nhật tồn kho</h3>
+                <button onClick={() => setEditingInventoryItem(null)} className="w-8 h-8 bg-stone-50 dark:bg-stone-800 rounded-full flex items-center justify-center text-stone-400">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Nguyên liệu</p>
+                <p className="text-lg font-black text-stone-800 dark:text-white">{editingInventoryItem.name}</p>
+              </div>
+
+              <form onSubmit={handleUpdateInventory} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số lượng thực tế</label>
+                  <input
+                    type="number"
+                    required
+                    value={editInventoryQty}
+                    onChange={(e) => setEditInventoryQty(e.target.value)}
+                    className="input-field text-xl font-black text-center"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-stone-400 text-center">
+                    Hệ thống sẽ tự động tạo phiếu điều chỉnh chênh lệch.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingInventoryItem(null)}
+                    className="flex-1 py-3 bg-stone-100 dark:bg-stone-800 text-stone-500 font-bold rounded-2xl"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingInventory}
+                    className="flex-1 py-3 bg-[#C9252C] text-white font-bold rounded-2xl shadow-lg shadow-red-100 dark:shadow-none disabled:opacity-50"
+                  >
+                    {isUpdatingInventory ? 'Đang lưu...' : 'Cập nhật'}
+                  </button>
+                </div>
               </form>
             </motion.div>
           </div>

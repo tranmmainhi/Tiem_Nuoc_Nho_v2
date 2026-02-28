@@ -17,7 +17,14 @@ import { DataProvider, useData } from './context/DataContext';
 import { CartProvider, useCart } from './context/CartContext';
 import { RefreshCw, Loader2 } from 'lucide-react';
 
-function AppContent() {
+const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbzUw7Af7sB8zVwOkdYuaBaDCI3t3CMlXpALJ5QVyl74FCYfuOrtIguB2RJYk6RaY_em/exec';
+
+interface AppContentProps {
+  appsScriptUrl: string;
+  setAppsScriptUrl: (url: string) => void;
+}
+
+function AppContent({ appsScriptUrl, setAppsScriptUrl }: AppContentProps) {
   const location = useLocation();
   const { isFabHidden, setIsFabHidden } = useUI();
   const { isRefreshing, isLoading } = useData();
@@ -28,23 +35,6 @@ function AppContent() {
   useEffect(() => {
     setIsFabHidden(showNotifications || isQrModalOpen);
   }, [showNotifications, isQrModalOpen, setIsFabHidden]);
-  const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycby5Ol64ymVwiFdOCk7D6LKfMblsXbfo00N40PD0jtFCzv2qDzb8wAdDmRSRbb0xpuc/exec';
-  const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
-    const saved = localStorage.getItem('appsScriptUrl');
-    const lastDefault = localStorage.getItem('lastDefaultUrl');
-    
-    // If we have a new default in the code, and the user hasn't manually changed it from the PREVIOUS default
-    if (lastDefault !== DEFAULT_URL) {
-      localStorage.setItem('lastDefaultUrl', DEFAULT_URL);
-      // If they were using the old default, update them to the new one
-      if (!saved || saved.includes('AKfycbx') || saved.includes('AKfycby')) { // Simple check for old URL pattern if exact match fails
-        localStorage.setItem('appsScriptUrl', DEFAULT_URL);
-        return DEFAULT_URL;
-      }
-    }
-    
-    return saved || DEFAULT_URL;
-  });
 
   const getTitle = () => {
     switch (location.pathname) {
@@ -221,9 +211,20 @@ function AppContent() {
 }
 
 export default function App() {
-  const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbycx6bnbd5wW5lDP1NBlNCorNBhYeAF5te9gX0kC4iUtTWaTzm5pGHU-kZRTW91w5-V/exec';
-  const [appsScriptUrl] = useState<string>(() => {
+  const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
     const saved = localStorage.getItem('appsScriptUrl');
+    const lastDefault = localStorage.getItem('lastDefaultUrl');
+    
+    // Check if we need to migrate to the new default URL
+    if (lastDefault !== DEFAULT_URL) {
+      localStorage.setItem('lastDefaultUrl', DEFAULT_URL);
+      // Force update to new URL if the saved one looks like an old Google Script URL or is empty
+      // This ensures users get the fix for the "Failed to fetch" error
+      if (!saved || saved.includes('script.google.com')) {
+        localStorage.setItem('appsScriptUrl', DEFAULT_URL);
+        return DEFAULT_URL;
+      }
+    }
     return saved || DEFAULT_URL;
   });
 
@@ -233,7 +234,7 @@ export default function App() {
         <DataProvider appsScriptUrl={appsScriptUrl}>
           <CartProvider>
             <HashRouter>
-              <AppContent />
+              <AppContent appsScriptUrl={appsScriptUrl} setAppsScriptUrl={setAppsScriptUrl} />
             </HashRouter>
           </CartProvider>
         </DataProvider>

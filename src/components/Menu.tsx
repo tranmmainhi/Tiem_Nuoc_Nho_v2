@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Minus, X, Check, Search, Heart, AlertCircle, RefreshCw, ChevronRight, ShoppingBag, Settings as SettingsIcon, Coffee, Package } from 'lucide-react';
+import { Plus, Minus, X, Check, Search, Heart, AlertCircle, RefreshCw, ChevronRight, ShoppingBag, Settings as SettingsIcon, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MenuItem, CartItem } from '../types';
 import { useUI } from '../context/UIContext';
@@ -264,6 +264,7 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
           <button
             onClick={() => fetchAllData(false)}
             disabled={isRefreshing || isLoading}
+            title="Làm mới dữ liệu thực đơn"
             className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-stone-50 dark:bg-stone-900 rounded-2xl shadow-sm dark:shadow-none text-stone-500 dark:text-stone-400 hover:text-[#C9252C] dark:hover:text-red-400 tap-active disabled:opacity-50 border border-stone-100 dark:border-stone-800 transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
@@ -271,9 +272,9 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-4 px-4 scroll-smooth scrollbar-hide">
-          {displayCategories.map((category) => (
+          {displayCategories.map((category, index) => (
             <button
-              key={category}
+              key={`category-${category}-${index}`}
               onClick={() => {
                 setActiveCategory(category);
                 setSearchQuery('');
@@ -302,7 +303,7 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
           {filteredItems.map((item, index) => (
             <motion.div
               layout
-              key={`menu-item-${item.id || 'unknown'}-${index}`}
+              key={`menu-item-${item.id}-${index}`}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -478,71 +479,53 @@ const MenuItemCard: React.FC<{
   isFavorite: boolean;
   onToggleFavorite: () => void;
 }> = ({ item, onOpenModal, onAddQuick, onOutOfStockClick, isAnimating, isFavorite, onToggleFavorite }) => {
-  const getPlaceholderColor = (name: string) => {
-    const colors = [
-      'bg-orange-100 text-orange-500 dark:bg-orange-900/30 dark:text-orange-400',
-      'bg-blue-100 text-blue-500 dark:bg-blue-900/30 dark:text-blue-400',
-      'bg-green-100 text-green-500 dark:bg-green-900/30 dark:text-green-400',
-      'bg-purple-100 text-purple-500 dark:bg-purple-900/30 dark:text-purple-400',
-      'bg-pink-100 text-pink-500 dark:bg-pink-900/30 dark:text-pink-400',
-      'bg-teal-100 text-teal-500 dark:bg-teal-900/30 dark:text-teal-400',
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  const placeholderClass = getPlaceholderColor(item.name);
-
   return (
     <motion.div 
       whileTap={{ scale: 0.98 }}
       onClick={() => item.isOutOfStock ? onOutOfStockClick() : onOpenModal()}
-      className={`group relative bg-white dark:bg-stone-900 rounded-[28px] p-4 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-xl hover:shadow-stone-200/50 dark:hover:shadow-none transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-50 grayscale pointer-events-none' : ''}`}
+      className={`group relative bg-white dark:bg-stone-900 rounded-2xl p-4 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60' : ''}`}
     >
       {item.isOutOfStock && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/60 dark:bg-black/60 backdrop-blur-[2px]">
-          <div className="bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg transform -rotate-6">Hết hàng</div>
+        <div className="absolute inset-0 z-20 bg-white/50 dark:bg-black/50 backdrop-blur-[1px] flex items-center justify-center">
+          <span className="bg-stone-800 text-white text-[10px] font-bold uppercase px-2 py-1 rounded-md transform -rotate-3 shadow-sm">Hết hàng</span>
         </div>
       )}
 
-      <div className="flex justify-between items-start mb-4">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${placeholderClass} transition-transform group-hover:scale-110 duration-300`}>
-          <Coffee className="w-6 h-6" />
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex-1 pr-2">
+          <h3 className="font-bold text-stone-800 dark:text-white text-sm leading-snug line-clamp-2 group-hover:text-[#C9252C] transition-colors flex items-center gap-1.5">
+            {item.name}
+            {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
+              <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shrink-0" title={`Sắp hết hàng: Còn ${item.inventoryQty}`} />
+            )}
+          </h3>
         </div>
         <button 
           onClick={(e) => {
             e.stopPropagation();
             onToggleFavorite();
           }}
-          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all tap-active hover:bg-stone-50 dark:hover:bg-stone-800 ${isFavorite ? 'text-[#C9252C]' : 'text-stone-300 dark:text-stone-600'}`}
+          className={`-mt-1 -mr-1 p-1.5 rounded-full transition-colors ${isFavorite ? 'text-[#C9252C]' : 'text-stone-300 dark:text-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
         >
-          <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+          <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
         </button>
       </div>
 
-      <div className="flex-grow space-y-2 mb-4">
-        <h3 className="font-bold text-stone-800 dark:text-white text-[15px] leading-snug line-clamp-2 min-h-[2.5rem] group-hover:text-[#C9252C] transition-colors">
-          {item.name}
-        </h3>
-        <div className="flex items-center justify-between">
-          <p className="text-stone-400 dark:text-stone-500 text-xs font-medium line-clamp-1">
-            {item.category}
-          </p>
-          {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
-            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full">
-              Chỉ còn {item.inventoryQty}
-            </span>
-          )}
-        </div>
+      <div className="mb-4 flex flex-wrap gap-2 items-center">
+        <p className="text-stone-400 dark:text-stone-500 text-[11px] font-medium uppercase tracking-wide line-clamp-1">
+          {item.category}
+        </p>
+        {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
+          <span className="text-[9px] font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded">
+            Còn {item.inventoryQty}
+          </span>
+        )}
       </div>
 
-      <div className="flex items-center justify-between mt-auto pt-3 border-t border-stone-50 dark:border-stone-800/50">
-        <p className="text-[#C9252C] font-black text-lg">
+      <div className="flex items-center justify-between mt-auto">
+        <p className="text-[#C9252C] font-black text-base">
           {item.price.toLocaleString('vi-VN')}
-          <span className="text-xs align-top ml-0.5">đ</span>
+          <span className="text-[10px] align-top ml-0.5">đ</span>
         </p>
         
         <button
@@ -554,13 +537,13 @@ const MenuItemCard: React.FC<{
               onAddQuick(e);
             }
           }}
-          className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md tap-active transition-transform hover:scale-105 active:scale-95 ${
+          className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm tap-active transition-transform hover:scale-105 active:scale-95 ${
             item.isOutOfStock 
               ? 'bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500' 
               : 'bg-[#C9252C] text-white shadow-red-200 dark:shadow-none'
           }`}
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
         </button>
       </div>
     </motion.div>
