@@ -285,6 +285,8 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
 
     // Map cart items to backend format
     const cartForBackend = cart.map(item => ({
+      id: item.id || (item as any).ma_mon,
+      qty: item.quantity,
       ma_mon: item.id || (item as any).ma_mon, 
       so_luong: item.quantity,
       has_customizations: item.hasCustomizations ?? false,

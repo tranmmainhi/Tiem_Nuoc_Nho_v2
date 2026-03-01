@@ -20,13 +20,8 @@ type TimeRange = 'day' | 'week' | 'month' | 'year';
 
 export function StaffView({ appsScriptUrl }: StaffViewProps) {
   const { setIsFabHidden } = useUI();
-  const { orders, menuItems, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, updateOrderStatus, refreshInterval, setRefreshInterval, inventoryItems, isOnline, lastUpdated } = useData();
+  const { orders, menuItems, isLoading: isDataLoading, isRefreshing, error: dataError, fetchAllData, updateOrderStatus, refreshInterval, setRefreshInterval, inventoryItems, isOnline, lastUpdated, dashboardData, soTayData, addSoTay } = useData();
   
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem('admin_expenses');
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [timeRange, setTimeRange] = useState<TimeRange>('day');
   const [isLoading, setIsLoading] = useState(false);
@@ -194,7 +189,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
   const expensesByCategory = useMemo(() => {
     const categoryMap = new Map<string, number>();
-    expenses.filter(e => e.phan_loai === 'Chi').forEach(expense => {
+    soTayData.filter(e => e.phan_loai === 'Chi').forEach(expense => {
       const current = categoryMap.get(expense.danh_muc) || 0;
       categoryMap.set(expense.danh_muc, current + Number(expense.so_tien));
     });
@@ -202,7 +197,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
     return Array.from(categoryMap.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses]);
+  }, [soTayData]);
 
   const EXPENSE_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
 
@@ -391,32 +386,8 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
     }));
   };
 
-  const fetchTransactions = async () => {
-    if (!appsScriptUrl) return;
-    try {
-      const response = await fetch(`${appsScriptUrl}?action=getTransactions`);
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        const processed = data.map(item => ({
-          id_thu_chi: item.id_thu_chi || item.Id_Thu_Chi,
-          so_tien: Number(item.so_tien || item.So_Tien || 0),
-          ghi_chu: item.ghi_chu || item.Ghi_Chu || '',
-          danh_muc: item.danh_muc || item.Danh_Muc || '',
-          thoi_gian: item.thoi_gian || item.Thoi_Gian || item.timestamp || new Date().toISOString(),
-          phan_loai: item.phan_loai || item.Phan_Loai || 'Chi'
-        }));
-        setExpenses(processed);
-        localStorage.setItem('admin_expenses', JSON.stringify(processed));
-      }
-    } catch (err) {
-      console.error('Lỗi khi tải danh sách chi tiêu:', err);
-    }
-  };
-
   useEffect(() => {
-    if (viewMode === 'expenses') {
-      fetchTransactions();
-    } else if (viewMode === 'inventory') {
+    if (viewMode === 'inventory') {
       fetchInventory();
     }
   }, [viewMode, appsScriptUrl]);
@@ -429,7 +400,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
     if (expenseType === 'Chi') {
       const today = new Date().toDateString();
-      const todayExpenses = expenses
+      const todayExpenses = soTayData
         .filter(exp => {
           const type = exp.phan_loai || 'Chi';
           const time = exp.thoi_gian;
@@ -444,41 +415,20 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
     setIsSubmitting(true);
     try {
-      // 1. Create Transaction Payload
-      const payload = {
-        action: "createTransaction",
-        phan_loai: expenseType,
+      const success = await addSoTay({
+        phan_loai: expenseType as 'Thu' | 'Chi',
         danh_muc: expenseCat,
         so_tien: Number(expenseAmount),
         ghi_chu: expenseDesc
-      };
-
-      console.log('Sending transaction payload:', payload);
-
-      const response = await fetch(appsScriptUrl, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       });
 
-      const text = await response.text();
-      console.log('Server response:', text);
-      
-      let result;
-      try {
-        result = JSON.parse(text);
-      } catch (e) {
-        throw new Error('Phản hồi từ máy chủ không hợp lệ (không phải JSON)');
-      }
-
-      if (result.status === 'success' || result.success) {
+      if (success) {
         setExpenseAmount('');
         setExpenseDesc('');
         setShowExpenseForm(false);
-        fetchTransactions();
-        alert('Đã thêm giao dịch thành công!');
+        showToast('Đã thêm giao dịch thành công!');
       } else {
-        setExpenseError('Lỗi khi thêm giao dịch: ' + (result.message || 'Lỗi không xác định'));
+        setExpenseError('Lỗi khi thêm giao dịch');
       }
     } catch (err: any) {
       console.error('Add expense error:', err);
@@ -499,16 +449,15 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
       });
       const result = await response.json();
       if (result.status === 'success' || result.success) {
-        fetchTransactions();
+        fetchAllData(false);
       } else {
         // If API fails but returns a message, show it
         alert('Lỗi khi xóa: ' + (result.message || 'Lỗi không xác định'));
       }
     } catch (err) {
       // Fallback to local delete if API fails or not supported
-      const updatedExpenses = expenses.filter(e => e.id_thu_chi !== id);
-      setExpenses(updatedExpenses);
-      localStorage.setItem('admin_expenses', JSON.stringify(updatedExpenses));
+      // Note: This won't persist if using context data, but provides immediate feedback
+      alert('Không thể kết nối để xóa.');
     }
   };
 
@@ -550,15 +499,29 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
     };
 
     const filteredOrders = orders.filter(o => o.orderStatus === 'Hoàn thành' && filterByTime(new Date(o.timestamp), timeRange));
-    const filteredExpenses = expenses.filter(e => filterByTime(new Date(e.thoi_gian), timeRange));
+    const filteredExpenses = soTayData.filter(e => filterByTime(new Date(e.thoi_gian), timeRange));
     
     const prevOrders = orders.filter(o => o.orderStatus === 'Hoàn thành' && filterByPreviousTime(new Date(o.timestamp), timeRange));
-    const prevExpenses = expenses.filter(e => filterByPreviousTime(new Date(e.thoi_gian), timeRange));
+    const prevExpenses = soTayData.filter(e => filterByPreviousTime(new Date(e.thoi_gian), timeRange));
 
-    const revenue = filteredOrders.reduce((sum, o) => sum + o.total, 0);
+    let revenue = filteredOrders.reduce((sum, o) => sum + o.total, 0);
+    let orderCount = filteredOrders.length;
+
+    if (dashboardData) {
+      if (timeRange === 'day') {
+        revenue = dashboardData.revenue.today;
+        orderCount = dashboardData.orders.today;
+      } else if (timeRange === 'week') {
+        revenue = dashboardData.revenue.thisWeek;
+        orderCount = dashboardData.orders.thisWeek;
+      } else if (timeRange === 'month') {
+        revenue = dashboardData.revenue.thisMonth;
+        orderCount = dashboardData.orders.thisMonth;
+      }
+    }
+
     const cost = filteredExpenses.reduce((sum, e) => sum + Number(e.so_tien), 0);
     const profit = revenue - cost;
-    const orderCount = filteredOrders.length;
 
     const prevRevenue = prevOrders.reduce((sum, o) => sum + o.total, 0);
     const prevCost = prevExpenses.reduce((sum, e) => sum + Number(e.so_tien), 0);
@@ -608,7 +571,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
       const d = new Date(o.timestamp);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && o.orderStatus === 'Hoàn thành';
     });
-    const currentMonthExpenses = expenses.filter(e => {
+    const currentMonthExpenses = soTayData.filter(e => {
       const d = new Date(e.thoi_gian);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && (e.phan_loai === 'Chi');
     });
@@ -673,7 +636,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
       .sort((a, b) => b.weeklyConsumption - a.weeklyConsumption);
 
     return { revenue, cost, profit, orderCount, expenseData, revenueData, growth, costGrowth, monthlyRevenue, monthlyCost, monthlyProfit, monthlyExpenseChartData, inventoryForecast };
-  }, [orders, expenses, menuItems, timeRange]);
+  }, [orders, soTayData, menuItems, timeRange, dashboardData]);
 
   const COLORS = ['#C9252C', '#B91C1C', '#991B1B', '#7F1D1D', '#450A0A'];
 
@@ -726,10 +689,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
           </div>
           <button
             onClick={() => {
-              if (viewMode === 'orders') fetchAllData(false);
-              else if (viewMode === 'expenses') fetchTransactions();
-              else if (viewMode === 'inventory') fetchInventory();
-              else if (viewMode === 'cash') { fetchAllData(false); fetchTransactions(); }
+              if (viewMode === 'inventory') fetchInventory();
               else fetchAllData(false);
             }}
             disabled={isRefreshing}
@@ -867,8 +827,8 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     <p className="text-5xl font-black tracking-tighter">
                       {(
                         orders.filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành')).reduce((sum, o) => sum + o.total, 0) +
-                        expenses.filter(e => (e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
-                        expenses.filter(e => e.phan_loai === 'Chi').reduce((sum, e) => sum + Number(e.so_tien), 0)
+                        soTayData.filter(e => (e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
+                        soTayData.filter(e => e.phan_loai === 'Chi').reduce((sum, e) => sum + Number(e.so_tien), 0)
                       ).toLocaleString()}
                     </p>
                     <span className="text-xl font-black text-emerald-200">đ</span>
@@ -915,7 +875,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                         time: o.timestamp,
                         isIn: true
                       })),
-                    ...expenses.map(e => ({
+                    ...soTayData.map(e => ({
                       type: 'transaction',
                       id: e.id_thu_chi,
                       amount: Number(e.so_tien),
@@ -1079,6 +1039,39 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Top Items Section */}
+              {dashboardData?.topItems && dashboardData.topItems.length > 0 && (
+                <div className="bg-white dark:bg-stone-900 p-8 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-widest">Món bán chạy</h3>
+                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Top 5 món hot nhất</p>
+                    </div>
+                    <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 rounded-2xl flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-amber-500" />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {dashboardData.topItems.slice(0, 5).map((item, idx) => (
+                      <div key={`top-item-${idx}`} className="flex items-center justify-between p-4 bg-stone-50 dark:bg-stone-800 rounded-2xl border border-stone-100/50 dark:border-stone-700/50">
+                        <div className="flex items-center gap-4">
+                          <div className="w-8 h-8 bg-white dark:bg-stone-700 rounded-lg flex items-center justify-center font-black text-stone-400 text-xs shadow-sm">
+                            #{idx + 1}
+                          </div>
+                          <div>
+                            <h4 className="font-black text-stone-800 dark:text-white text-sm leading-tight">{item.name}</h4>
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-0.5">Đã bán: {item.quantity}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black text-[#C9252C] tracking-tight">{item.revenue.toLocaleString()}đ</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Monthly Performance Section */}
               <div className="bg-white dark:bg-stone-900 p-8 rounded-[48px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-8">
@@ -1246,7 +1239,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                       </div>
                       <span className="text-sm font-bold text-stone-700 dark:text-stone-300">Giao dịch chi tiêu</span>
                     </div>
-                    <span className="text-sm font-black text-stone-800 dark:text-white">{expenses.length}</span>
+                    <span className="text-sm font-black text-stone-800 dark:text-white">{soTayData.length}</span>
                   </div>
                 </div>
               </div>
@@ -1643,7 +1636,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                 </div>
                 <div className="flex gap-2">
                   <button 
-                    onClick={() => fetchTransactions()}
+                    onClick={() => fetchAllData(false)}
                     className="w-10 h-10 bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
                   >
                     <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
@@ -1703,7 +1696,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
               {/* Expense List */}
               <div className="space-y-4">
-                {expenses.length === 0 ? (
+                {soTayData.length === 0 ? (
                   <div className="text-center py-24 flex flex-col items-center justify-center">
                     <div className="w-20 h-20 bg-stone-100 dark:bg-stone-800 rounded-[32px] flex items-center justify-center mb-6 text-stone-300 dark:text-stone-600">
                       <Wallet className="w-10 h-10" />
@@ -1712,7 +1705,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mt-2">Ghi lại các khoản chi của quán</p>
                   </div>
                 ) : (
-                  expenses.map((expense, index) => (
+                  soTayData.map((expense, index) => (
                     <motion.div 
                       key={`expense-item-${index}`}
                       initial={{ opacity: 0, y: 10 }}

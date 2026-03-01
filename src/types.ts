@@ -1,3 +1,19 @@
+export interface DashboardData {
+  revenue: { today: number; thisWeek: number; thisMonth: number };
+  orders: { today: number; thisWeek: number; thisMonth: number };
+  topItems: { name: string; quantity: number; revenue: number }[];
+  recentOrders: OrderData[];
+}
+
+export interface SoTayItem {
+  id_thu_chi: string;
+  so_tien: number;
+  ghi_chu: string;
+  danh_muc: string;
+  thoi_gian: string;
+  phan_loai: string;
+}
+
 export interface MenuItem {
   id: string;
   name: string;

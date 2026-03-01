@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { OrderData, Expense } from '../types';
+import { OrderData, Expense, DashboardData, SoTayItem } from '../types';
 
 interface MenuItem {
   id: string;
@@ -24,6 +24,8 @@ interface DataContextType {
   inventoryItems: InventoryItem[];
   financeData: any[];
   expenses: Expense[];
+  dashboardData: DashboardData | null;
+  soTayData: SoTayItem[];
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -38,6 +40,7 @@ interface DataContextType {
   createOrder: (orderData: any, showLoader?: boolean) => Promise<boolean>;
   syncDatabase: () => Promise<boolean>;
   setupDatabase: () => Promise<boolean>;
+  addSoTay: (item: Omit<SoTayItem, 'id_thu_chi' | 'thoi_gian'>) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -48,6 +51,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [financeData, setFinanceData] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [soTayData, setSoTayData] = useState<SoTayItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,21 +95,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     setError(null);
 
     try {
-      // Fetch Menu and Orders first (Critical data)
-      let menuRes, ordersRes;
+      // Fetch Menu, Orders, Dashboard, SoTay
+      let menuRes, ordersRes, dashboardRes, soTayRes;
       try {
-        [menuRes, ordersRes] = await Promise.all([
-          fetch(`${appsScriptUrl}?action=getAllMenu`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
-          fetch(`${appsScriptUrl}?action=getOrders`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) }))
+        [menuRes, ordersRes, dashboardRes, soTayRes] = await Promise.all([
+          fetch(`${appsScriptUrl}?action=getMenu`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
+          fetch(`${appsScriptUrl}?action=getOrders`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
+          fetch(`${appsScriptUrl}?action=getDashboard`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
+          fetch(`${appsScriptUrl}?action=getSoTay`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) }))
         ]);
       } catch (e: any) {
         console.warn('Initial fetch failed:', e);
         menuRes = { ok: false, json: () => Promise.resolve(null) };
         ordersRes = { ok: false, json: () => Promise.resolve(null) };
+        dashboardRes = { ok: false, json: () => Promise.resolve(null) };
+        soTayRes = { ok: false, json: () => Promise.resolve(null) };
       }
 
       const menuJson = (menuRes as any).ok ? await (menuRes as any).json().catch(() => null) : null;
       const ordersJson = (ordersRes as any).ok ? await (ordersRes as any).json().catch(() => null) : null;
+      const dashboardJson = (dashboardRes as any).ok ? await (dashboardRes as any).json().catch(() => null) : null;
+      const soTayJson = (soTayRes as any).ok ? await (soTayRes as any).json().catch(() => null) : null;
 
       // Handle new API structure: { status: "success", data: [...] }
       const menuData = (menuJson && typeof menuJson === 'object' && Array.isArray(menuJson.data)) 
@@ -114,6 +125,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       const ordersData = (ordersJson && typeof ordersJson === 'object' && Array.isArray(ordersJson.data))
         ? ordersJson.data
         : (Array.isArray(ordersJson) ? ordersJson : []);
+
+      if (dashboardJson && dashboardJson.status === 'success') {
+        setDashboardData(dashboardJson.data);
+      }
+
+      if (soTayJson && soTayJson.status === 'success' && Array.isArray(soTayJson.data)) {
+        setSoTayData(soTayJson.data);
+      }
 
       // Map and Deduplicate Orders
       const uniqueOrdersMap = new Map();
@@ -185,74 +204,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       }
       const uniqueOrders = Array.from(uniqueOrdersMap.values()) as OrderData[];
 
-      // Try to fetch inventory, but don't block if it fails
-      let inventoryData = [];
-      try {
-        const inventoryRes = await fetch(`${appsScriptUrl}?action=getInventoryData`, { credentials: 'omit' }).catch(() => null);
-        if (inventoryRes && inventoryRes.ok) {
-          const invJson = await inventoryRes.json().catch(() => null);
-          
-          // Handle various structures: 
-          // 1. { status: "success", data: [...] }
-          // 2. { status: "success", data: { materials: [...], logs: [...] } }
-          // 3. [...]
-          
-          if (invJson && typeof invJson === 'object') {
-            const rawData = invJson.data || invJson;
-            if (Array.isArray(rawData)) {
-              inventoryData = rawData;
-            } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.materials)) {
-              inventoryData = rawData.materials;
-            } else {
-              inventoryData = [];
-            }
-          }
-        }
-      } catch (invError) {
-        console.warn('Failed to fetch inventory data:', invError);
-      }
-
-      let inventoryMap = new Map<string, number>();
-      let mappedInventoryItems: InventoryItem[] = [];
-
-      if (Array.isArray(inventoryData) && inventoryData.length > 0) {
-        inventoryData.forEach((item: any) => {
-          const keys = Object.keys(item);
-          const findKey = (patterns: string[]) => keys.find(k => {
-            const lowerK = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return patterns.some(p => lowerK.includes(p.toLowerCase()));
-          });
-          const idKey = findKey(['ma nguyen lieu', 'ma_nguyen_lieu', 'id']) || 'Ma_Nguyen_Lieu';
-          const qtyKey = findKey(['ton kho', 'ton_kho', 'inventory_qty', 'so luong']) || 'Ton_Kho';
-          const nameKey = findKey(['ten nguyen lieu', 'ten_nguyen_lieu', 'name']) || 'Ten_Nguyen_Lieu';
-          
-          if (item[idKey] && item[qtyKey] !== undefined) {
-            inventoryMap.set(String(item[idKey]), Number(item[qtyKey]));
-            mappedInventoryItems.push({
-              id: String(item[idKey]),
-              name: String(item[nameKey] || item[idKey]),
-              quantity: Number(item[qtyKey])
-            });
-          }
-        });
-        setInventoryItems(mappedInventoryItems);
-      }
-
-      // Fetch Finance Report
-      try {
-        const financeRes = await fetch(`${appsScriptUrl}?action=getFinanceReport`, { credentials: 'omit' }).catch(() => null);
-        if (financeRes && financeRes.ok) {
-          const finJson = await financeRes.json().catch(() => null);
-          const finData = (finJson && typeof finJson === 'object' && Array.isArray(finJson.data))
-            ? finJson.data
-            : (Array.isArray(finJson) ? finJson : []);
-          setFinanceData(finData);
-          setExpenses(finData as Expense[]);
-        }
-      } catch (finError) {
-        console.warn('Failed to fetch finance report:', finError);
-      }
-
       if (Array.isArray(menuData)) {
         const mappedMenu = menuData.map((item: any) => {
           const keys = Object.keys(item);
@@ -267,6 +218,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           const stockKey = findKey(['co san', 'co_san', 'stock', 'trang thai']) || 'Co_San';
           const catKey = findKey(['danh muc', 'danh_muc', 'loai', 'nhom', 'category']) || 'Danh_Muc';
           const customKey = findKey(['has customizations', 'has_customizations', 'tuy chinh']) || 'Has_Customizations';
+          const inventoryKey = findKey(['inventoryQty', 'inventory_qty', 'ton kho', 'ton_kho', 'so luong ton', 'so_luong_ton']) || 'Inventory_Qty';
 
           const id = String(item[idKey] || '');
           const name = String(item[nameKey] || '');
@@ -274,13 +226,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           // Skip items without a name or ID
           if (!name || !id) return null;
 
-          const inventoryQty = inventoryMap.has(id) ? inventoryMap.get(id) : undefined;
           let isOutOfStock = String(item[stockKey]) === 'false' || item[stockKey] === false;
           
-          if (inventoryQty !== undefined && inventoryQty <= 0) {
-            isOutOfStock = true;
-          }
-
           return {
             id,
             name,
@@ -288,7 +235,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
             category: String(item[catKey] || 'Khác'),
             isOutOfStock,
             hasCustomizations: String(item[customKey]) === 'true' || item[customKey] === true,
-            inventoryQty
+            inventoryQty: Number(item[inventoryKey] || 0),
           };
         }).filter((item) => item !== null) as MenuItem[];
         
@@ -311,6 +258,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         }
 
         setMenuItems(finalMenu);
+        localStorage.setItem('menu_data', JSON.stringify(finalMenu));
       }
 
       if (uniqueOrders.length > 0) {
@@ -424,7 +372,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     try {
       const response = await fetch(appsScriptUrl, {
         method: 'POST',
-        body: JSON.stringify({ action: 'syncDatabase' }),
+        body: JSON.stringify({ action: 'syncAllSheets' }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       }).catch(() => null);
       
@@ -468,6 +416,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     }
   };
 
+  const addSoTay = async (item: Omit<SoTayItem, 'id_thu_chi' | 'thoi_gian'>) => {
+    if (!appsScriptUrl) return false;
+    setIsLoading(true);
+    try {
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'addSoTay', ...item }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      }).catch(() => null);
+      
+      if (!response || !response.ok) return false;
+      
+      const result = await response.json().catch(() => null);
+      if (result && result.status === 'success') {
+        await fetchAllData(false);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <DataContext.Provider value={{ 
       menuItems, 
@@ -475,6 +448,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       inventoryItems,
       financeData,
       expenses,
+      dashboardData,
+      soTayData,
       isLoading, 
       isRefreshing, 
       error, 
@@ -488,7 +463,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       updateOrderStatus,
       createOrder,
       syncDatabase,
-      setupDatabase
+      setupDatabase,
+      addSoTay
     }}>
       {children}
     </DataContext.Provider>
