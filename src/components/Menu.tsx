@@ -645,11 +645,11 @@ const MenuItemCard = memo(({
       animate={{ opacity: 1, y: 0 }}
       whileTap={{ scale: 0.98 }}
       onClick={() => item.isOutOfStock ? onOutOfStockClick() : onOpenModal()}
-      className={`group relative bg-white dark:bg-stone-900 rounded-xl p-3 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-60' : ''}`}
+      className={`group relative bg-white dark:bg-stone-900 rounded-xl p-3 flex flex-col h-full border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden ${item.isOutOfStock ? 'opacity-50 grayscale bg-stone-50/50 dark:bg-stone-900/50' : ''}`}
     >
       {item.isOutOfStock && (
-        <div className="absolute inset-0 z-20 bg-white/50 dark:bg-black/50 backdrop-blur-[1px] flex items-center justify-center">
-          <span className="bg-stone-800 text-white text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md transform -rotate-3 shadow-sm">Hết hàng</span>
+        <div className="absolute inset-0 z-20 bg-white/40 dark:bg-black/40 backdrop-blur-[1px] flex items-center justify-center">
+          <div className="bg-stone-800/90 text-white text-[10px] font-black uppercase px-3 py-1 rounded-full transform -rotate-6 shadow-xl border border-white/10 tracking-widest">Hết hàng</div>
         </div>
       )}
 
@@ -662,7 +662,7 @@ const MenuItemCard = memo(({
         className={`absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-md transition-all z-10 ${
           isFavorite 
             ? 'bg-red-500 text-white shadow-lg' 
-            : 'bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 hover:text-red-500'
+            : 'bg-stone-50/80 dark:bg-stone-800/80 text-stone-400 dark:text-stone-500 hover:text-red-500'
         }`}
       >
         <Heart className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
@@ -671,10 +671,10 @@ const MenuItemCard = memo(({
       <div className="flex flex-col h-full">
         <div className="flex-1 mb-2">
           <div className="flex justify-between items-start gap-1">
-            <h3 className="font-bold text-stone-800 dark:text-white text-[13px] leading-tight line-clamp-2 group-hover:text-[#C9252C] transition-colors">
+            <h3 className={`font-bold text-[13px] leading-tight line-clamp-2 transition-colors ${item.isOutOfStock ? 'text-stone-400 line-through decoration-stone-400 decoration-1' : 'text-stone-800 dark:text-white group-hover:text-[#C9252C]'}`}>
               {item.name}
             </h3>
-            {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && (
+            {item.inventoryQty !== undefined && item.inventoryQty > 0 && item.inventoryQty <= 5 && !item.isOutOfStock && (
               <span className="flex-shrink-0 text-[8px] font-black text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-1 py-0.5 rounded-md animate-pulse">
                 {item.inventoryQty}
               </span>

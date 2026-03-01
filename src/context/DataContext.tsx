@@ -46,8 +46,14 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: string }> = ({ children, appsScriptUrl }) => {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [orders, setOrders] = useState<OrderData[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
+    const saved = localStorage.getItem('menu_data');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [orders, setOrders] = useState<OrderData[]>(() => {
+    const saved = localStorage.getItem('orders_data');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [financeData, setFinanceData] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -263,6 +269,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
 
       if (uniqueOrders.length > 0) {
         setOrders(uniqueOrders);
+        localStorage.setItem('orders_data', JSON.stringify(uniqueOrders));
       } else if (Array.isArray(ordersData)) {
         setOrders(ordersData);
       }

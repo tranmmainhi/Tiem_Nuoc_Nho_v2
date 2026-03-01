@@ -40,6 +40,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   const [showInvoice, setShowInvoice] = useState(false);
+  const [isItemsExpanded, setIsItemsExpanded] = useState(false);
 
   const showToast = (message: string) => {
     setToast({ message, visible: true });
@@ -474,6 +475,43 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
               <span className="text-stone-400 dark:text-stone-500">Tổng tiền</span>
               <span className="font-black text-[#C9252C] dark:text-red-400 text-lg">{submittedOrder.total.toLocaleString()}đ</span>
             </div>
+          </div>
+
+          {/* Items Accordion */}
+          <div className="pt-4 border-t border-stone-50 dark:border-stone-800">
+            <button 
+              onClick={() => setIsItemsExpanded(!isItemsExpanded)}
+              className="w-full flex items-center justify-between text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+            >
+              <span className="text-[10px] font-black uppercase tracking-widest">Danh sách món ({submittedOrder.items.length})</span>
+              <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${isItemsExpanded ? 'rotate-90' : ''}`} />
+            </button>
+            
+            <AnimatePresence>
+              {isItemsExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-4 space-y-3">
+                    {submittedOrder.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-start text-xs">
+                        <div className="flex-1 min-w-0 pr-4">
+                          <p className="font-bold text-stone-800 dark:text-white truncate">{item.name}</p>
+                          <p className="text-[10px] text-stone-400 dark:text-stone-500">
+                            {item.quantity}x • {item.temperature}
+                            {item.size !== 'Tiêu chuẩn' && ` • Size ${item.size}`}
+                          </p>
+                        </div>
+                        <span className="font-bold text-stone-600 dark:text-stone-400">{(item.unitPrice * item.quantity).toLocaleString()}đ</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
