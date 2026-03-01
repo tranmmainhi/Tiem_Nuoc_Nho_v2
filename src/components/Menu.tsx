@@ -18,6 +18,16 @@ interface MenuProps {
   onNavigateSettings: () => void;
 }
 
+interface GroupedMenuItem extends MenuItem {
+  variants?: {
+    [key: string]: {
+      id: string;
+      price: number;
+      isOutOfStock: boolean;
+    };
+  };
+}
+
 export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   const { setIsFabHidden } = useUI();
   const { menuItems: rawMenuItems, isLoading, isRefreshing, error, fetchAllData, createOrder, lastUpdated } = useData();
@@ -32,8 +42,8 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
 
   const [activeCategory, setActiveCategory] = useState('Tất cả');
   const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'name_asc'>('default');
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [outOfStockItem, setOutOfStockItem] = useState<MenuItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<GroupedMenuItem | null>(null);
+  const [outOfStockItem, setOutOfStockItem] = useState<GroupedMenuItem | null>(null);
   const [animatingItemId, setAnimatingItemId] = useState<string | null>(null);
   const [flyingItem, setFlyingItem] = useState<{ x: number; y: number; id: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,9 +118,9 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
   }, []);
 
   const menuItems = useMemo(() => {
-    const uniqueItemsMap = new Map();
+    const uniqueItemsMap = new Map<string, GroupedMenuItem>();
     
-    rawMenuItems.forEach((item: any) => {
+    rawMenuItems.forEach((item) => {
       const match = item.name.match(/\s*[\(\-]?\s*(Nóng|Đá|Hot|Ice)\s*[\)]?$/i);
       let variantType = 'default';
       if (match) {
@@ -132,14 +142,17 @@ export function Menu({ appsScriptUrl, onNavigateSettings }: MenuProps) {
           }
         });
       } else {
-        const existingItem = uniqueItemsMap.get(normalizedName);
+        const existingItem = uniqueItemsMap.get(normalizedName)!;
         if (!existingItem.variants) existingItem.variants = {};
         existingItem.variants[variantType] = { id: item.id, price: item.price, isOutOfStock: item.isOutOfStock };
-        existingItem.isOutOfStock = existingItem.isOutOfStock && item.isOutOfStock;
-        if (variantType === 'Đá') {
+        
+        // If default/Ice variant, update the main item display
+        if (variantType === 'Đá' || variantType === 'default') {
            existingItem.id = item.id;
            existingItem.price = item.price;
         }
+        // If any variant is in stock, the item is in stock (simplified logic, or keep existing)
+        // existingItem.isOutOfStock = existingItem.isOutOfStock && item.isOutOfStock;
       }
     });
     
@@ -714,7 +727,7 @@ const MenuItemCard = memo(({
   );
 });
 
-const CustomizationModal: React.FC<{ item: MenuItem; currentQty: number; onClose: () => void; onAdd: (item: CartItem, e: React.MouseEvent) => void; showToast: (msg: string) => void }> = ({ item, currentQty, onClose, onAdd, showToast }) => {
+const CustomizationModal: React.FC<{ item: GroupedMenuItem; currentQty: number; onClose: () => void; onAdd: (item: CartItem, e: React.MouseEvent) => void; showToast: (msg: string) => void }> = ({ item, currentQty, onClose, onAdd, showToast }) => {
   const [quantity, setQuantity] = useState(1);
   const [temperature, setTemperature] = useState('Đá');
   const [sugarLevel, setSugarLevel] = useState('Bình thường');

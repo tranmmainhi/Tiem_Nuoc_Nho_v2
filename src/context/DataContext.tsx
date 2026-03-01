@@ -1,29 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { OrderData, Expense, DashboardData, SoTayItem } from '../types';
-
-interface MenuItem {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
-  isOutOfStock: boolean;
-  hasCustomizations: boolean;
-  inventoryQty?: number;
-  variants?: Record<string, { id: string; price: number }>;
-}
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  quantity: number;
-}
+import { OrderData, DashboardData, SoTayItem, MenuItem, OrderRow, CartItem } from '../types';
 
 interface DataContextType {
   menuItems: MenuItem[];
+  inventoryItems: MenuItem[];
   orders: OrderData[];
-  inventoryItems: InventoryItem[];
-  financeData: any[];
-  expenses: Expense[];
+  financeData: OrderData[];
   dashboardData: DashboardData | null;
   soTayData: SoTayItem[];
   isLoading: boolean;
@@ -36,11 +18,10 @@ interface DataContextType {
   setAutoSyncEnabled: (enabled: boolean) => void;
   setRefreshInterval: (interval: number) => void;
   fetchAllData: (showFullLoader?: boolean) => Promise<void>;
-  updateOrderStatus: (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => Promise<boolean>;
+  updateOrderStatus: (orderId: string, status: string, additionalData?: any) => Promise<boolean>;
   createOrder: (orderData: any, showLoader?: boolean) => Promise<boolean>;
-  syncDatabase: () => Promise<boolean>;
-  setupDatabase: () => Promise<boolean>;
-  addSoTay: (item: Omit<SoTayItem, 'id_thu_chi' | 'thoi_gian'>) => Promise<boolean>;
+  fixAll: () => Promise<boolean>;
+  addSoTay: (item: { phan_loai: string; danh_muc: string; so_tien: number; ghi_chu: string }) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -50,13 +31,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     const saved = localStorage.getItem('menu_data');
     return saved ? JSON.parse(saved) : [];
   });
+  
+  const inventoryItems = React.useMemo(() => menuItems.filter(item => item.inventoryQty !== undefined), [menuItems]);
+
   const [orders, setOrders] = useState<OrderData[]>(() => {
     const saved = localStorage.getItem('orders_data');
     return saved ? JSON.parse(saved) : [];
   });
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [financeData, setFinanceData] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [soTayData, setSoTayData] = useState<SoTayItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,11 +47,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const [isOnline, setIsOnline] = useState(true);
   const [refreshInterval, setRefreshIntervalState] = useState(() => {
     const saved = localStorage.getItem('refreshInterval');
-    return saved ? Math.max(15, Number(saved)) : 15;
+    return saved ? Math.max(15, Number(saved)) : 30;
   });
   const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => {
     const saved = localStorage.getItem('autoSyncEnabled');
-    return saved !== 'false'; // Default to true
+    return saved !== 'false';
   });
 
   const isFetchingRef = useRef(false);
@@ -90,7 +71,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const fetchAllData = useCallback(async (showFullLoader = false) => {
     if (!appsScriptUrl || isFetchingRef.current) return;
     
-    // Rate limit protection: don't fetch more than once every 5 seconds manually
     const now = Date.now();
     if (now - lastFetchTimeRef.current < 5000 && !showFullLoader) return;
 
@@ -101,192 +81,95 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     setError(null);
 
     try {
-      // Fetch Menu, Orders, Dashboard, SoTay
-      let menuRes, ordersRes, dashboardRes, soTayRes;
-      try {
-        [menuRes, ordersRes, dashboardRes, soTayRes] = await Promise.all([
-          fetch(`${appsScriptUrl}?action=getMenu`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
-          fetch(`${appsScriptUrl}?action=getOrders`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
-          fetch(`${appsScriptUrl}?action=getDashboard`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
-          fetch(`${appsScriptUrl}?action=getSoTay`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) }))
-        ]);
-      } catch (e: any) {
-        console.warn('Initial fetch failed:', e);
-        menuRes = { ok: false, json: () => Promise.resolve(null) };
-        ordersRes = { ok: false, json: () => Promise.resolve(null) };
-        dashboardRes = { ok: false, json: () => Promise.resolve(null) };
-        soTayRes = { ok: false, json: () => Promise.resolve(null) };
+      const [menuRes, ordersRes, dashboardRes, soTayRes] = await Promise.all([
+        fetch(`${appsScriptUrl}?action=getMenu`).then(r => r.json()).catch(() => null),
+        fetch(`${appsScriptUrl}?action=getOrders`).then(r => r.json()).catch(() => null),
+        fetch(`${appsScriptUrl}?action=getDashboard`).then(r => r.json()).catch(() => null),
+        fetch(`${appsScriptUrl}?action=getSoTay`).then(r => r.json()).catch(() => null)
+      ]);
+
+      // Process Menu
+      if (menuRes && menuRes.status === 'success' && Array.isArray(menuRes.data)) {
+        const mappedMenu: MenuItem[] = menuRes.data.map((item: any) => ({
+          id: item.ma_mon,
+          name: item.ten_mon,
+          price: Number(item.gia_ban),
+          category: item.danh_muc,
+          isOutOfStock: !item.co_san
+        }));
+        setMenuItems(mappedMenu);
+        localStorage.setItem('menu_data', JSON.stringify(mappedMenu));
       }
 
-      const menuJson = (menuRes as any).ok ? await (menuRes as any).json().catch(() => null) : null;
-      const ordersJson = (ordersRes as any).ok ? await (ordersRes as any).json().catch(() => null) : null;
-      const dashboardJson = (dashboardRes as any).ok ? await (dashboardRes as any).json().catch(() => null) : null;
-      const soTayJson = (soTayRes as any).ok ? await (soTayRes as any).json().catch(() => null) : null;
+      // Process Orders (Group by ORDER_ID)
+      if (ordersRes && ordersRes.status === 'success' && Array.isArray(ordersRes.data)) {
+        const rows: OrderRow[] = ordersRes.data;
+        const ordersMap = new Map<string, OrderData>();
 
-      // Handle new API structure: { status: "success", data: [...] }
-      const menuData = (menuJson && typeof menuJson === 'object' && Array.isArray(menuJson.data)) 
-        ? menuJson.data 
-        : (Array.isArray(menuJson) ? menuJson : []);
-
-      const ordersData = (ordersJson && typeof ordersJson === 'object' && Array.isArray(ordersJson.data))
-        ? ordersJson.data
-        : (Array.isArray(ordersJson) ? ordersJson : []);
-
-      if (dashboardJson && dashboardJson.status === 'success') {
-        setDashboardData(dashboardJson.data);
-      }
-
-      if (soTayJson && soTayJson.status === 'success' && Array.isArray(soTayJson.data)) {
-        setSoTayData(soTayJson.data);
-      }
-
-      // Map and Deduplicate Orders
-      const uniqueOrdersMap = new Map();
-      if (Array.isArray(ordersData)) {
-        ordersData.forEach((row: any) => {
-          const id = row.ORDER_ID || row.orderId || row.ma_don || row.id || row.ma_don_hang;
-          if (!id) return;
-
-          if (!uniqueOrdersMap.has(id)) {
-            // Robust date parsing for "DD/MM/YYYY HH:mm:ss" or ISO
-            let timestamp = row.timestamp || row.thoi_gian || row.TIME || row.THOI_GIAN || new Date().toISOString();
-            if (typeof timestamp === 'string' && timestamp.includes('/') && timestamp.includes(':')) {
-              // Try to parse "DD/MM/YYYY HH:mm:ss"
-              const parts = timestamp.split(/[\s/:]/);
-              if (parts.length >= 6) {
-                const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]), Number(parts[3]), Number(parts[4]), Number(parts[5]));
-                if (!isNaN(d.getTime())) {
-                  timestamp = d.toISOString();
-                }
-              }
-            }
-
-            // Initialize order if not exists
-            uniqueOrdersMap.set(id, {
-              orderId: String(id),
-              customerName: row.customerName || row.ten_khach_hang || 'Khách hàng',
-              phoneNumber: row.phoneNumber || row.so_dien_thoai || '',
-              tableNumber: row.tableNumber || row.so_ban || '',
+        rows.forEach(row => {
+          if (!row.ORDER_ID) return;
+          
+          if (!ordersMap.has(row.ORDER_ID)) {
+            ordersMap.set(row.ORDER_ID, {
+              orderId: row.ORDER_ID,
+              customerName: row.CUSTOMER_NAME,
+              phoneNumber: row.PHONE,
+              tableNumber: row.TABLE_NO,
               items: [],
-              total: Number(row.total || row.tong_tien || 0),
-              timestamp: timestamp,
-              notes: row.notes || row.ghi_chu || '',
-              paymentMethod: row.paymentMethod || row.thanh_toan || 'Tiền mặt',
-              orderStatus: row.orderStatus || row.trang_thai || 'Chờ xử lý',
-              paymentStatus: row.paymentStatus || (row.thanh_toan === 'Chuyển khoản' ? 'Đã thanh toán' : 'Chưa thanh toán'),
+              total: 0, // Will recalculate or use row.TOTAL if consistent
+              timestamp: row.TIMESTAMP,
+              notes: row.NOTES,
+              paymentMethod: row.PAYMENT_METHOD,
+              orderStatus: row.STATUS
             });
           }
 
-          // Add item to the order
-          const order = uniqueOrdersMap.get(id);
-          
-          // Check if this row actually contains item data (it should, given it's a flat list of items)
-          // Some rows might be just order headers if the backend joins differently, but assuming inner join style:
-          if (row.ten_mon || row.name) {
-             const item = {
-                id: row.ma_mon || row.id || '',
-                name: row.ten_mon || row.name || 'Món chưa đặt tên',
-                quantity: Number(row.so_luong || row.quantity || 1),
-                price: Number(row.don_gia || row.price || 0),
-                // Add other item fields if available in the flat row
-                cartItemId: `${id}-${order.items.length}`, // Generate a temporary ID
-                unitPrice: Number(row.don_gia || row.price || 0),
-                size: row.size || 'M',
-                toppings: row.toppings ? (typeof row.toppings === 'string' ? JSON.parse(row.toppings) : row.toppings) : [],
-                note: row.ghi_chu_mon || '',
-             };
-             order.items.push(item);
-          } else if (row.items) {
-             // Fallback: if the row still has an 'items' array (hybrid structure), use it
-             let items = row.items;
-             if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch (e) { items = []; }
-             }
-             if (Array.isArray(items)) {
-                order.items.push(...items);
-             }
+          const order = ordersMap.get(row.ORDER_ID)!;
+          if (row.ITEM_ID) {
+            order.items.push({
+              id: row.ITEM_ID,
+              name: row.ITEM_NAME,
+              price: Number(row.PRICE),
+              quantity: Number(row.QTY),
+              category: '', // Not needed for order display usually
+              isOutOfStock: false,
+              cartItemId: `${row.ORDER_ID}-${row.ITEM_ID}`,
+              note: '',
+              unitPrice: Number(row.PRICE)
+            });
+            // Recalculate total from items to be safe, or trust backend
+            // order.total += Number(row.TOTAL); 
           }
+          // Trust the total from the first row or accumulate? 
+          // Backend usually sends total per row as line total or order total. 
+          // Let's assume row.TOTAL is line total.
+          order.total += Number(row.TOTAL || 0);
         });
-      }
-      const uniqueOrders = Array.from(uniqueOrdersMap.values()) as OrderData[];
 
-      if (Array.isArray(menuData)) {
-        const mappedMenu = menuData.map((item: any) => {
-          const keys = Object.keys(item);
-          const findKey = (patterns: string[]) => keys.find(k => {
-            const lowerK = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return patterns.some(p => lowerK.includes(p.toLowerCase()));
-          });
-
-          const nameKey = findKey(['ten mon', 'ten_mon', 'name']) || 'Ten_Mon';
-          const priceKey = findKey(['gia ban', 'gia_ban', 'price', 'don gia']) || 'Gia_Ban';
-          const idKey = findKey(['ma mon', 'ma_mon', 'id']) || 'Ma_Mon';
-          const stockKey = findKey(['co san', 'co_san', 'stock', 'trang thai']) || 'Co_San';
-          const catKey = findKey(['danh muc', 'danh_muc', 'loai', 'nhom', 'category']) || 'Danh_Muc';
-          const customKey = findKey(['has customizations', 'has_customizations', 'tuy chinh']) || 'Has_Customizations';
-          const inventoryKey = findKey(['inventoryQty', 'inventory_qty', 'ton kho', 'ton_kho', 'so luong ton', 'so_luong_ton']) || 'Inventory_Qty';
-
-          const id = String(item[idKey] || '');
-          const name = String(item[nameKey] || '');
-          
-          // Skip items without a name or ID
-          if (!name || !id) return null;
-
-          let isOutOfStock = String(item[stockKey]) === 'false' || item[stockKey] === false;
-          
-          return {
-            id,
-            name,
-            price: Number(item[priceKey] || 0),
-            category: String(item[catKey] || 'Khác'),
-            isOutOfStock,
-            hasCustomizations: String(item[customKey]) === 'true' || item[customKey] === true,
-            inventoryQty: Number(item[inventoryKey] || 0),
-          };
-        }).filter((item) => item !== null) as MenuItem[];
-        
-        // Deduplicate Menu Items
-        const uniqueMenuMap = new Map();
-        mappedMenu.forEach(item => {
-          if (item.id) uniqueMenuMap.set(item.id, item);
-        });
-        const finalMenu = Array.from(uniqueMenuMap.values()) as MenuItem[];
-        
-        // Detect items that just went out of stock
-        if (menuItems.length > 0) {
-          finalMenu.forEach(newItem => {
-            const oldItem = menuItems.find(i => i.id === newItem.id);
-            if (oldItem && !oldItem.isOutOfStock && newItem.isOutOfStock) {
-              // Trigger a custom event for components to listen to
-              window.dispatchEvent(new CustomEvent('itemOutOfStock', { detail: newItem }));
-            }
-          });
-        }
-
-        setMenuItems(finalMenu);
-        localStorage.setItem('menu_data', JSON.stringify(finalMenu));
+        const groupedOrders = Array.from(ordersMap.values()).sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        setOrders(groupedOrders);
+        localStorage.setItem('orders_data', JSON.stringify(groupedOrders));
       }
 
-      if (uniqueOrders.length > 0) {
-        setOrders(uniqueOrders);
-        localStorage.setItem('orders_data', JSON.stringify(uniqueOrders));
-      } else if (Array.isArray(ordersData)) {
-        setOrders(ordersData);
+      // Process Dashboard
+      if (dashboardRes && dashboardRes.status === 'success') {
+        setDashboardData(dashboardRes.data);
+      }
+
+      // Process So Tay
+      if (soTayRes && soTayRes.status === 'success' && Array.isArray(soTayRes.data)) {
+        setSoTayData(soTayRes.data);
       }
 
       setLastUpdated(new Date());
       setIsOnline(true);
       lastFetchTimeRef.current = Date.now();
-    } catch (err: any) {
-      console.error('Data fetch error:', err);
+    } catch (err) {
+      console.error('Fetch error:', err);
       setIsOnline(false);
-      if (err.message?.includes('Rate exceeded')) {
-        setError('Hệ thống đang bận. Vui lòng đợi...');
-      } else if (err.message?.includes('Failed to fetch')) {
-        setError('Không thể kết nối. Vui lòng kiểm tra mạng hoặc URL.');
-      } else {
-        setError('Lỗi kết nối máy chủ');
-      }
+      setError('Lỗi kết nối máy chủ');
     } finally {
       if (showFullLoader) setIsLoading(false);
       else setIsRefreshing(false);
@@ -294,54 +177,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     }
   }, [appsScriptUrl]);
 
-  // Smart Polling
   useEffect(() => {
     if (!autoSyncEnabled) return;
-
     const intervalId = setInterval(() => {
-      // Only poll if tab is active and not already fetching
       if (document.visibilityState === 'visible' && !isFetchingRef.current) {
         fetchAllData(false);
       }
     }, refreshInterval * 1000);
-
     return () => clearInterval(intervalId);
   }, [fetchAllData, refreshInterval, autoSyncEnabled]);
 
-  // Initial Load
   useEffect(() => {
     fetchAllData(true);
   }, [appsScriptUrl]);
 
-  const updateOrderStatus = async (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => {
+  const updateOrderStatus = async (orderId: string, status: string, additionalData?: any) => {
     if (!appsScriptUrl) return false;
     setIsLoading(true);
     try {
+      const payload = { 
+        action: 'updateOrderStatus', 
+        orderId, 
+        status,
+        ...additionalData 
+      };
+      
       const response = await fetch(appsScriptUrl, {
         method: 'POST',
-        body: JSON.stringify({ 
-          action: 'updateOrderStatus', 
-          ma_don: orderId, 
-          trang_thai: status,
-          ORDER_ID: orderId,
-          TRANG_THAI: status,
-          orderId, 
-          orderStatus: status,
-          paymentStatus: paymentStatus,
-          ...additionalData
-        }),
+        body: JSON.stringify(payload),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      }).catch(() => null);
-      
-      if (!response || !response.ok) return false;
-      
-      const result = await response.json().catch(() => null);
-      if (result && result.status === 'success') {
-        await fetchAllData(false); // Action-Triggered Refetch
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        await fetchAllData(false);
         return true;
       }
       return false;
-    } catch (err) {
+    } catch (e) {
       return false;
     } finally {
       setIsLoading(false);
@@ -352,78 +224,63 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     if (!appsScriptUrl) return false;
     if (showLoader) setIsLoading(true);
     try {
+      // Transform items to {id, qty} format as requested
+      const itemsPayload = orderData.items.map((item: CartItem) => ({
+        id: item.id,
+        qty: item.quantity
+      }));
+
+      const payload = {
+        action: 'createOrder',
+        items: itemsPayload,
+        customerName: orderData.customerName,
+        phoneNumber: orderData.phoneNumber,
+        tableNumber: orderData.tableNumber,
+        paymentMethod: orderData.paymentMethod,
+        notes: orderData.notes
+      };
+
       const response = await fetch(appsScriptUrl, {
         method: 'POST',
-        body: JSON.stringify({ action: 'createOrder', ...orderData }),
+        body: JSON.stringify(payload),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      }).catch(() => null);
-      
-      if (!response || !response.ok) return false;
-      
-      const result = await response.json().catch(() => null);
-      if (result && result.status === 'success') {
-        await fetchAllData(false); // Action-Triggered Refetch
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        await fetchAllData(false);
         return true;
       }
       return false;
-    } catch (err) {
+    } catch (e) {
       return false;
     } finally {
       if (showLoader) setIsLoading(false);
     }
   };
 
-  const syncDatabase = async () => {
+  const fixAll = async () => {
     if (!appsScriptUrl) return false;
     setIsLoading(true);
     try {
       const response = await fetch(appsScriptUrl, {
         method: 'POST',
-        body: JSON.stringify({ action: 'syncAllSheets' }),
+        body: JSON.stringify({ action: 'fixAll' }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      }).catch(() => null);
-      
-      if (!response || !response.ok) return false;
-      
-      const result = await response.json().catch(() => null);
-      if (result && result.status === 'success') {
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
         await fetchAllData(false);
         return true;
       }
       return false;
-    } catch (err) {
+    } catch (e) {
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const setupDatabase = async () => {
-    if (!appsScriptUrl) return false;
-    setIsLoading(true);
-    try {
-      const response = await fetch(appsScriptUrl, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'setup' }),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      }).catch(() => null);
-      
-      if (!response || !response.ok) return false;
-      
-      const result = await response.json().catch(() => null);
-      if (result && result.status === 'success') {
-        await fetchAllData(false);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const addSoTay = async (item: Omit<SoTayItem, 'id_thu_chi' | 'thoi_gian'>) => {
+  const addSoTay = async (item: { phan_loai: string; danh_muc: string; so_tien: number; ghi_chu: string }) => {
     if (!appsScriptUrl) return false;
     setIsLoading(true);
     try {
@@ -431,17 +288,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         method: 'POST',
         body: JSON.stringify({ action: 'addSoTay', ...item }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      }).catch(() => null);
-      
-      if (!response || !response.ok) return false;
-      
-      const result = await response.json().catch(() => null);
-      if (result && result.status === 'success') {
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
         await fetchAllData(false);
         return true;
       }
       return false;
-    } catch (err) {
+    } catch (e) {
       return false;
     } finally {
       setIsLoading(false);
@@ -451,10 +305,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   return (
     <DataContext.Provider value={{ 
       menuItems, 
-      orders, 
       inventoryItems,
-      financeData,
-      expenses,
+      orders, 
+      financeData: orders,
       dashboardData,
       soTayData,
       isLoading, 
@@ -469,8 +322,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       fetchAllData,
       updateOrderStatus,
       createOrder,
-      syncDatabase,
-      setupDatabase,
+      fixAll,
       addSoTay
     }}>
       {children}

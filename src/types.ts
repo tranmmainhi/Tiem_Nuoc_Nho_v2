@@ -1,17 +1,25 @@
 export interface DashboardData {
-  revenue: { today: number; thisWeek: number; thisMonth: number };
-  orders: { today: number; thisWeek: number; thisMonth: number };
-  topItems: { name: string; quantity: number; revenue: number }[];
-  recentOrders: OrderData[];
+  revenue: {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  orders: {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  topItems?: { name: string; quantity: number }[];
 }
 
 export interface SoTayItem {
-  id_thu_chi: string;
+  id?: string;
+  id_thu_chi?: string;
+  thoi_gian: string;
+  phan_loai: 'Thu' | 'Chi';
+  danh_muc: string;
   so_tien: number;
   ghi_chu: string;
-  danh_muc: string;
-  thoi_gian: string;
-  phan_loai: string;
 }
 
 export interface MenuItem {
@@ -19,28 +27,40 @@ export interface MenuItem {
   name: string;
   price: number;
   category: string;
+  image?: string;
+  description?: string;
   isOutOfStock?: boolean;
-  hasCustomizations?: boolean;
   inventoryQty?: number;
-  variants?: {
-    [key: string]: {
-      id: string;
-      price: number;
-      isOutOfStock?: boolean;
-    };
-  };
+  hasCustomizations?: boolean;
 }
 
 export interface CartItem extends MenuItem {
   cartItemId: string;
   quantity: number;
-  size: string;
-  toppings: string[];
   unitPrice: number;
+  note?: string;
+  size?: string;
   temperature?: string;
   sugarLevel?: string;
   iceLevel?: string;
-  note?: string;
+  toppings?: any[];
+  hasCustomizations?: boolean;
+}
+
+export interface OrderRow {
+  ORDER_ID: string;
+  CUSTOMER_NAME: string;
+  PHONE: string;
+  TABLE_NO: string;
+  ITEM_ID: string;
+  ITEM_NAME: string;
+  QTY: number;
+  PRICE: number;
+  TOTAL: number;
+  STATUS: string;
+  PAYMENT_METHOD: string;
+  NOTES: string;
+  TIMESTAMP: string;
 }
 
 export interface OrderData {
@@ -52,35 +72,16 @@ export interface OrderData {
   total: number;
   timestamp: string;
   notes?: string;
-  paymentMethod: 'Tiền mặt' | 'Chuyển khoản';
-  orderStatus: 'Chờ xử lý' | 'Đã nhận' | 'Đang làm' | 'Hoàn thành' | 'Đã hủy';
-  paymentStatus: 'Chưa thanh toán' | 'Đã thanh toán';
+  paymentMethod: string;
+  orderStatus: string;
+  paymentStatus?: string;
 }
 
 export interface Expense {
-  id_thu_chi: string;
-  so_tien: number;
-  ghi_chu: string;
-  danh_muc: string;
-  thoi_gian: string;
-  phan_loai: string;
-}
-
-// New API Types
-export interface APIMenuItem {
-  ma_mon: string;
-  ten_mon: string;
-  gia_ban: number;
-  danh_muc: string;
-  co_san: boolean | string;
-}
-
-export interface APIPendingOrder {
-  thoi_gian: string;
-  so_luong: string | number;
-  ten_mon: string;
-  tong_tien: number;
-  trang_thai: string;
-  ma_don: string;
-  ghi_chu: string;
+  id: string;
+  amount: number;
+  description: string;
+  category: string;
+  date: string;
+  type: 'expense' | 'income';
 }

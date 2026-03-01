@@ -356,17 +356,17 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
   }, [sortBy, appsScriptUrl]);
 
   const handleQuickUpdate = (order: OrderData) => {
-    if (order.orderStatus === 'Đã nhận' || order.orderStatus === 'Chờ xử lý') updateStatus(order.orderId, 'Đang làm');
+    if (order.orderStatus === 'Đã nhận' || order.orderStatus === 'Chờ xử lý') updateStatus(order.orderId, 'processing');
     else if (order.orderStatus === 'Đang làm') {
       if (window.confirm('Xác nhận đơn hàng này đã hoàn thành và thanh toán?')) {
-        updateStatus(order.orderId, 'Hoàn thành', 'Đã thanh toán');
+        updateStatus(order.orderId, 'completed', { totalPrice: order.total, paymentStatus: 'Đã thanh toán' });
       }
     }
   };
 
-  const updateStatus = async (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => {
+  const updateStatus = async (orderId: string, status: string, additionalData?: any) => {
     try {
-      const success = await updateOrderStatus(orderId, status, paymentStatus, additionalData);
+      const success = await updateOrderStatus(orderId, status, additionalData);
       if (!success) {
         showToast('Lỗi cập nhật trạng thái. Vui lòng thử lại!', 'error');
       } else {
@@ -827,7 +827,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     <p className="text-5xl font-black tracking-tighter">
                       {(
                         orders.filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành')).reduce((sum, o) => sum + o.total, 0) +
-                        soTayData.filter(e => (e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
+                        soTayData.filter(e => (e.phan_loai === 'Thu')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
                         soTayData.filter(e => e.phan_loai === 'Chi').reduce((sum, e) => sum + Number(e.so_tien), 0)
                       ).toLocaleString()}
                     </p>
@@ -881,7 +881,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                       amount: Number(e.so_tien),
                       desc: e.ghi_chu,
                       time: e.thoi_gian,
-                      isIn: e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập'
+                      isIn: e.phan_loai === 'Thu'
                     }))
                   ]
                   .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
@@ -1065,7 +1065,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-black text-[#C9252C] tracking-tight">{item.revenue.toLocaleString()}đ</p>
+                          <p className="text-sm font-black text-[#C9252C] tracking-tight">{item.quantity} ly</p>
                         </div>
                       </div>
                     ))}
@@ -1465,7 +1465,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                             <>
                               {order.orderStatus !== 'Đang làm' && (
                                 <button 
-                                  onClick={() => updateStatus(order.orderId, 'Đang làm')}
+                                  onClick={() => updateStatus(order.orderId, 'processing')}
                                   className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 dark:shadow-none tap-active hover:bg-blue-700 transition-all active:scale-95"
                                 >
                                   Làm món
@@ -1474,7 +1474,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                               <button 
                                 onClick={() => {
                                   if (window.confirm('Xác nhận hoàn thành và thanh toán?')) {
-                                    updateStatus(order.orderId, 'Hoàn thành', 'Đã thanh toán');
+                                    updateStatus(order.orderId, 'completed', { totalPrice: order.total, paymentStatus: 'Đã thanh toán' });
                                   }
                                 }}
                                 className="flex-1 py-4 bg-[#C9252C] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-200 dark:shadow-none tap-active hover:bg-red-700 transition-all active:scale-95"
@@ -1496,7 +1496,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                                 onClick={() => {
                                   if (window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) {
                                     const cartItemsPayload = mapOrderToBackend(order.items);
-                                    updateStatus(order.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
+                                    updateStatus(order.orderId, 'cancelled', { cartItems: cartItemsPayload });
                                   }
                                 }}
                                 className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-red-600 transition-all active:scale-95"
@@ -1791,13 +1791,13 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                             <p className="text-[10px] text-stone-400 font-bold">{item.id}</p>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className={`text-sm font-black ${item.quantity <= 5 ? 'text-red-500' : 'text-emerald-600'}`}>
-                              {item.quantity}
+                            <span className={`text-sm font-black ${(item.inventoryQty || 0) <= 5 ? 'text-red-500' : 'text-emerald-600'}`}>
+                              {item.inventoryQty || 0}
                             </span>
                             <button 
                               onClick={() => {
                                 setEditingInventoryItem(item);
-                                setEditInventoryQty(String(item.quantity));
+                                setEditInventoryQty(String(item.inventoryQty || 0));
                               }}
                               className="p-2 bg-white dark:bg-stone-700 rounded-lg shadow-sm text-stone-500 hover:text-[#C9252C] transition-colors"
                             >

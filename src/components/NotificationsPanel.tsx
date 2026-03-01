@@ -20,7 +20,7 @@ interface AppNotification {
 }
 
 export function NotificationsPanel({ isOpen, onClose, appsScriptUrl }: NotificationsPanelProps) {
-  const { orders, expenses } = useData();
+  const { orders, soTayData } = useData();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export function NotificationsPanel({ isOpen, onClose, appsScriptUrl }: Notificat
     // 4. End of Day Summary (After 20:00)
     if (now.getHours() >= 20) {
       const todayOrders = orders.filter(o => new Date(o.timestamp).toDateString() === now.toDateString() && o.orderStatus === 'Hoàn thành');
-      const todayExpenses = expenses.filter(e => new Date(e.thoi_gian).toDateString() === now.toDateString());
+      const todayExpenses = soTayData.filter(e => e.phan_loai === 'Chi' && new Date(e.thoi_gian).toDateString() === now.toDateString());
       
       const todayRevenue = todayOrders.reduce((sum, o) => sum + o.total, 0);
       const todayCost = todayExpenses.reduce((sum, e) => sum + Number(e.so_tien), 0);
@@ -135,9 +135,9 @@ export function NotificationsPanel({ isOpen, onClose, appsScriptUrl }: Notificat
         const d = new Date(o.timestamp);
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && o.orderStatus === 'Hoàn thành';
       });
-      const thisMonthExpenses = expenses.filter(e => {
+      const thisMonthExpenses = soTayData.filter(e => {
         const d = new Date(e.thoi_gian);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        return e.phan_loai === 'Chi' && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       });
 
       const monthRevenue = thisMonthOrders.reduce((sum, o) => sum + o.total, 0);

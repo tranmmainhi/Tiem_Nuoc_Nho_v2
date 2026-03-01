@@ -318,11 +318,11 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       so_ban: tableNumber,
       thanh_toan: paymentMethod,
       so_dien_thoai: phoneNumber,
-      items: cartForBackend
+      cartItems: cartForBackend
     };
 
     try {
-      const success = await createOrder(payload, false);
+      const success = await createOrder(orderData, false);
 
       if (!success) {
         throw new Error('Có lỗi xảy ra khi gửi đơn hàng.');
@@ -380,7 +380,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
     setIsSubmitting(true);
     try {
       const cartItemsPayload = mapCartToBackend(submittedOrder.items);
-      const success = await updateOrderStatus(submittedOrder.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
+      const success = await updateOrderStatus(submittedOrder.orderId, 'cancelled', { cartItems: cartItemsPayload });
       
       if (success) {
         showToast('Hủy đơn thành công!');
@@ -404,7 +404,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
     try {
       const cartItemsPayload = mapCartToBackend(submittedOrder.items);
       // Cancel old order first
-      await updateOrderStatus(submittedOrder.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
+      await updateOrderStatus(submittedOrder.orderId, 'cancelled', { cartItems: cartItemsPayload });
       
       // Restore cart
       restoreCart(submittedOrder.items);
