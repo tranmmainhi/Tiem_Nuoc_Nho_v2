@@ -18,7 +18,7 @@ import { CartProvider, useCart } from './context/CartContext';
 import { RefreshCw, Loader2, X } from 'lucide-react';
 import { notificationService } from './services/NotificationService';
 
-const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbw5t7KxKyQsTRIzfWd15SfJZ465LJ5rxwD6dLmtew8N8ho9-0NUYvJ/exec';
+const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbxJacjM6iZXsbaf27XVLGKvs7zArOuoQ9cKK-qEKHgYz_rfhqcCuTJLDU39kpCFRrTN/exec';
 
 interface AppContentProps {
   appsScriptUrl: string;

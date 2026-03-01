@@ -131,7 +131,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
             </div>
             <button 
               onClick={() => {
-                const defaultUrl = 'https://script.google.com/macros/s/AKfycbwzknc8DQz48L7I3j-YC_Rd8KavO4tFlogytheNjYyaujpIMDYnuNFXrS9gNMbWcUMF/exec';
+                const defaultUrl = 'https://script.google.com/macros/s/AKfycbxJacjM6iZXsbaf27XVLGKvs7zArOuoQ9cKK-qEKHgYz_rfhqcCuTJLDU39kpCFRrTN/exec';
                 setUrl(defaultUrl);
               }}
               className="p-2.5 text-stone-400 hover:text-[#C9252C] hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all tap-active"

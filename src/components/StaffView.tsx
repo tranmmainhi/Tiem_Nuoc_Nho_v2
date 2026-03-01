@@ -35,6 +35,12 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
   const [notifiedOrderIds, setNotifiedOrderIds] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [sortBy, setSortBy] = useState<'time' | 'status'>('time');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
   const [volume, setVolume] = useState(() => Number(localStorage.getItem('notificationVolume') || 80));
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('notificationMuted') === 'true');
   const [currentPage, setCurrentPage] = useState(1);
@@ -369,10 +375,12 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
     try {
       const success = await updateOrderStatus(orderId, status, paymentStatus, additionalData);
       if (!success) {
-        alert('Lỗi cập nhật trạng thái');
+        showToast('Lỗi cập nhật trạng thái. Vui lòng thử lại!', 'error');
+      } else {
+        showToast(`Đã cập nhật đơn #${orderId} thành ${status}`);
       }
     } catch (err) {
-      alert('Không thể cập nhật trạng thái');
+      showToast('Không thể kết nối máy chủ để cập nhật trạng thái', 'error');
     }
   };
 
@@ -787,17 +795,38 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
             exit={{ height: 0, opacity: 0 }}
             className="px-6 pt-4 overflow-hidden"
           >
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 p-4 rounded-2xl flex items-center gap-4">
-              <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center flex-shrink-0">
-                <Calendar className="w-5 h-5" />
+            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 px-4 py-3 rounded-2xl flex items-center gap-3">
+              <div className="w-8 h-8 bg-amber-500 text-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+                <Calendar className="w-4 h-4" />
               </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-black text-amber-800 dark:text-amber-400 uppercase tracking-tight">Nhắc nhở thanh toán</h4>
-                <p className="text-xs font-medium text-amber-700 dark:text-amber-500">Hôm nay là ngày {new Date().getDate()}. Vui lòng thanh toán các chi phí cố định hàng tháng (Tiền nhà, điện, nước...) trước ngày 05.</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-400 leading-tight">
+                  <span className="font-black uppercase tracking-widest mr-1.5">Nhắc nhở:</span>
+                  Thanh toán chi phí cố định (Tiền nhà, điện, nước...) trước ngày 05.
+                </p>
               </div>
-              <button onClick={() => setShowFixedCostReminder(false)} className="text-amber-400 hover:text-amber-600">
-                <XCircle className="w-5 h-5" />
+              <button onClick={() => setShowFixedCostReminder(false)} className="text-amber-400 hover:text-amber-600 transition-colors p-1">
+                <XCircle className="w-4 h-4" />
               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-24 left-6 right-6 z-[100] flex justify-center pointer-events-none"
+          >
+            <div className={`px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 pointer-events-auto ${
+              toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+            }`}>
+              {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+              <span className="text-sm font-black tracking-tight">{toast.message}</span>
             </div>
           </motion.div>
         )}
@@ -1338,122 +1367,148 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                                   (currentTime.getTime() - new Date(order.timestamp).getTime()) < 60000;
                     
                     return (
-                      <div 
-                        key={`order-item-${index}`}
-                        className={`card p-6 space-y-5 relative overflow-hidden duration-500 bg-white dark:bg-stone-900 shadow-sm hover:shadow-md border-2 ${
-                          isNew ? 'border-[#C9252C] ring-8 ring-[#C9252C]/5' : 'border-stone-100 dark:border-stone-800'
+                      <motion.div 
+                        key={`order-item-${order.orderId}`}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`bg-white dark:bg-stone-900 rounded-[32px] overflow-hidden border-2 transition-all duration-300 ${
+                          isNew ? 'border-[#C9252C] shadow-xl shadow-red-100 dark:shadow-none' : 'border-stone-100 dark:border-stone-800 shadow-sm'
                         }`}
                       >
-                        {/* Status Progress Bar */}
-                        <div className="flex gap-1.5 mb-2">
-                          {['Chờ xử lý', 'Đã nhận', 'Đang làm', 'Hoàn thành'].map((step, idx) => {
-                            const currentIdx = ['Chờ xử lý', 'Đã nhận', 'Đang làm', 'Hoàn thành'].indexOf(order.orderStatus);
-                            const isCompleted = currentIdx >= idx;
-                            const isCancelled = order.orderStatus === 'Đã hủy';
-                            
-                            if (isCancelled) return null;
-
-                            return (
-                              <div 
-                                key={step} 
-                                className={`h-1.5 flex-1 rounded-full transition-all duration-700 ${
-                                  isCompleted ? 'bg-[#C9252C]' : 'bg-stone-100 dark:bg-stone-800'
-                                }`} 
-                              />
-                            );
-                          })}
-                          {order.orderStatus === 'Đã hủy' && <div className="h-1.5 flex-1 rounded-full bg-stone-800" />}
-                        </div>
-
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-lg border border-stone-100 dark:border-stone-700">#{order.orderId}</span>
-                              <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
-                                order.orderStatus === 'Hoàn thành' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' :
-                                order.orderStatus === 'Đã hủy' ? 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400' :
-                                order.orderStatus === 'Đang làm' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' :
-                                'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
-                              }`}>
-                                {order.orderStatus}
-                              </span>
+                        {/* Card Header */}
+                        <div className="p-5 flex justify-between items-start border-b border-stone-50 dark:border-stone-800">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
+                              order.orderStatus === 'Hoàn thành' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' :
+                              order.orderStatus === 'Đã hủy' ? 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400' :
+                              order.orderStatus === 'Đang làm' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' :
+                              'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
+                            }`}>
+                              {order.orderStatus === 'Hoàn thành' ? <CheckCircle2 className="w-6 h-6" /> :
+                               order.orderStatus === 'Đã hủy' ? <XCircle className="w-6 h-6" /> :
+                               order.orderStatus === 'Đang làm' ? <Coffee className="w-6 h-6" /> :
+                               <Clock className="w-6 h-6" />}
                             </div>
-                            <h3 className="font-black text-stone-800 dark:text-white text-2xl leading-none tracking-tight">{order.customerName}</h3>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-stone-400 dark:text-stone-500 text-[11px] font-bold mt-2">
-                              <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{order.tableNumber || 'Mang đi'}</span>
-                              {order.phoneNumber && <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" />{order.phoneNumber}</span>}
-                              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                          </div>
-                          <div className="text-right flex flex-col items-end gap-3">
-                            <div className="flex items-baseline gap-1">
-                              <p className="text-[#C9252C] dark:text-red-400 font-black text-3xl leading-none tracking-tighter">{order.total.toLocaleString()}</p>
-                              <span className="text-xs font-black text-[#C9252C]/60">đ</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={() => setSelectedOrderForInvoice(order)}
-                                className="w-10 h-10 bg-stone-50 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-[#C9252C] transition-all tap-active border border-stone-100 dark:border-stone-700 flex items-center justify-center"
-                                title="Xuất hóa đơn"
-                              >
-                                <Share2 className="w-4 h-4" />
-                              </button>
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border ${
-                                order.paymentStatus === 'Đã thanh toán' ? 'border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' : 'border-amber-100 dark:border-amber-900/30 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
-                              }`}>
-                                {order.paymentStatus === 'Đã thanh toán' ? 'Đã trả' : 'Chưa trả'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="bg-stone-50 dark:bg-stone-800/50 rounded-[24px] p-5 space-y-3 border border-stone-100/50 dark:border-stone-700/50">
-                          {order.items.map((item: any, idx) => (
-                            <div key={`order-item-${order.orderId}-${idx}`} className="flex justify-between items-center">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-white dark:bg-stone-700 rounded-xl flex items-center justify-center text-[#C9252C] font-black text-xs shadow-sm border border-stone-100 dark:border-stone-600">
-                                  {item.quantity}
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-stone-800 dark:text-white font-black text-sm">{item.name}</span>
-                                  {item.note && <span className="text-[10px] text-stone-400 font-bold italic">{item.note}</span>}
-                                </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">#{order.orderId}</span>
+                                {isNew && <span className="w-2 h-2 bg-[#C9252C] rounded-full animate-ping" />}
                               </div>
-                              <span className="text-stone-400 dark:text-stone-500 font-black text-[9px] uppercase tracking-widest bg-white dark:bg-stone-700 px-2.5 py-1 rounded-lg border border-stone-100 dark:border-stone-600">{item.size}</span>
+                              <h3 className="font-black text-stone-800 dark:text-white text-lg tracking-tight">{order.customerName}</h3>
                             </div>
-                          ))}
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-baseline justify-end gap-1">
+                              <span className="text-2xl font-black text-[#C9252C] tracking-tighter">{order.total.toLocaleString()}</span>
+                              <span className="text-[10px] font-black text-[#C9252C]/60 uppercase">đ</span>
+                            </div>
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">
+                              {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3 pt-2">
-                          <button 
-                            onClick={() => updateStatus(order.orderId, 'Đang làm')} 
-                            className={`py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all border-2 tap-active ${order.orderStatus === 'Đang làm' ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-                          >
-                            Làm món
-                          </button>
-                          <button 
-                            onClick={() => {
-                              if (window.confirm('Xác nhận đơn hàng này đã hoàn thành và thanh toán?')) {
-                                updateStatus(order.orderId, 'Hoàn thành', 'Đã thanh toán');
-                              }
-                            }} 
-                            className={`py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all border-2 tap-active ${order.orderStatus === 'Hoàn thành' ? 'border-[#C9252C] bg-[#C9252C] text-white shadow-xl shadow-red-100' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500 hover:border-[#C9252C] hover:text-[#C9252C]'}`}
-                          >
-                            Hoàn thành
-                          </button>
-                          <button 
-                            onClick={() => {
-                              if (window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) {
-                                const cartItemsPayload = mapOrderToBackend(order.items);
-                                updateStatus(order.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
-                              }
-                            }} 
-                            className={`py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all border-2 tap-active ${order.orderStatus === 'Đã hủy' ? 'border-stone-800 bg-stone-800 text-white' : 'border-stone-100 dark:border-stone-800 text-stone-400 dark:text-stone-500 hover:border-stone-800 hover:text-stone-800'}`}
-                          >
-                            Hủy đơn
-                          </button>
+                        {/* Card Body */}
+                        <div className="p-5 space-y-4">
+                          {/* Info Pills */}
+                          <div className="flex flex-wrap gap-2">
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700">
+                              <MapPin className="w-3 h-3 text-stone-400" />
+                              <span className="text-[10px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-widest">{order.tableNumber || 'Mang đi'}</span>
+                            </div>
+                            {order.phoneNumber && (
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700">
+                                <User className="w-3 h-3 text-stone-400" />
+                                <span className="text-[10px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-widest">{order.phoneNumber}</span>
+                              </div>
+                            )}
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${
+                              order.paymentStatus === 'Đã thanh toán' 
+                                ? 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-900/10 dark:border-emerald-900/30 dark:text-emerald-400' 
+                                : 'bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-900/10 dark:border-amber-900/30 dark:text-amber-400'
+                            }`}>
+                              <DollarSign className="w-3 h-3" />
+                              <span className="text-[10px] font-black uppercase tracking-widest">{order.paymentStatus || 'Chưa trả'}</span>
+                            </div>
+                          </div>
+
+                          {/* Items List */}
+                          <div className="space-y-2">
+                            {order.items.map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between group">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-7 h-7 bg-stone-50 dark:bg-stone-800 rounded-lg flex items-center justify-center text-stone-400 font-black text-[10px] border border-stone-100 dark:border-stone-700">
+                                    {item.quantity}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-bold text-stone-800 dark:text-white leading-none">{item.name}</p>
+                                    {item.note && <p className="text-[10px] text-stone-400 font-medium italic mt-1">"{item.note}"</p>}
+                                  </div>
+                                </div>
+                                <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-md border border-stone-100 dark:border-stone-700">{item.size}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Order Note if any */}
+                          {order.notes && (
+                            <div className="p-3 bg-red-50/50 dark:bg-red-900/5 rounded-2xl border border-red-100/50 dark:border-red-900/10">
+                              <p className="text-[10px] font-bold text-[#C9252C] italic flex items-center gap-2">
+                                <FileText className="w-3 h-3" />
+                                {order.notes}
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      </div>
+
+                        {/* Card Actions */}
+                        <div className="p-5 bg-stone-50/50 dark:bg-stone-800/20 border-t border-stone-50 dark:border-stone-800 flex gap-3">
+                          {order.orderStatus !== 'Hoàn thành' && order.orderStatus !== 'Đã hủy' && (
+                            <>
+                              {order.orderStatus !== 'Đang làm' && (
+                                <button 
+                                  onClick={() => updateStatus(order.orderId, 'Đang làm')}
+                                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 dark:shadow-none tap-active hover:bg-blue-700 transition-all"
+                                >
+                                  Làm món
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => {
+                                  if (window.confirm('Xác nhận hoàn thành và thanh toán?')) {
+                                    updateStatus(order.orderId, 'Hoàn thành', 'Đã thanh toán');
+                                  }
+                                }}
+                                className="flex-1 py-4 bg-[#C9252C] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-200 dark:shadow-none tap-active hover:bg-red-700 transition-all"
+                              >
+                                Hoàn thành
+                              </button>
+                            </>
+                          )}
+                          
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => setSelectedOrderForInvoice(order)}
+                              className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-[#C9252C] transition-all"
+                            >
+                              <Share2 className="w-5 h-5" />
+                            </button>
+                            {order.orderStatus !== 'Đã hủy' && order.orderStatus !== 'Hoàn thành' && (
+                              <button 
+                                onClick={() => {
+                                  if (window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) {
+                                    const cartItemsPayload = mapOrderToBackend(order.items);
+                                    updateStatus(order.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
+                                  }
+                                }}
+                                className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-red-600 transition-all"
+                              >
+                                <XCircle className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
                     );
                   })
                 )}
