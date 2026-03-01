@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, CheckCircle2, Store, Printer, Volume2, Wifi, Moon, Sun, Database, RotateCcw, Clock } from 'lucide-react';
+import { Save, CheckCircle2, Store, Printer, Volume2, Wifi, Moon, Sun, Database, RotateCcw, Clock, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
@@ -51,6 +51,46 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
 
   const [isSaved, setIsSaved] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbxJacjM6iZXsbaf27XVLGKvs7zArOuoQ9cKK-qEKHgYz_rfhqcCuTJLDU39kpCFRrTN/exec';
+
+  const validateUrl = (value: string) => {
+    if (!value.trim()) return 'URL không được để trống';
+    if (!value.startsWith('https://script.google.com/macros/s/')) {
+      return 'URL Apps Script không hợp lệ. Phải bắt đầu bằng https://script.google.com/macros/s/...';
+    }
+    return null;
+  };
+
+  const handleRestoreDefault = () => {
+    setUrl(DEFAULT_URL);
+    setUrlError(null);
+  };
+
+  const handleTestConnection = async () => {
+    const error = validateUrl(url);
+    if (error) {
+      setUrlError(error);
+      return;
+    }
+
+    setIsTestingConnection(true);
+    setUrlError(null);
+    try {
+      const response = await fetch(`${url}?action=getAllMenu`, { credentials: 'omit' });
+      if (response.ok) {
+        alert('Kết nối thành công! Dữ liệu đã sẵn sàng.');
+      } else {
+        setUrlError('Không thể kết nối. Máy chủ phản hồi lỗi: ' + response.status);
+      }
+    } catch (err) {
+      setUrlError('Lỗi kết nối. Vui lòng kiểm tra lại URL hoặc mạng internet.');
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   useEffect(() => {
     const changed = 
@@ -143,18 +183,63 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Apps Script URL</label>
+              <div className="flex items-center justify-between ml-1">
+                <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest">Apps Script URL</label>
+                {url !== DEFAULT_URL && (
+                  <button 
+                    onClick={handleRestoreDefault}
+                    className="text-[9px] font-black text-[#C9252C] uppercase tracking-wider hover:underline"
+                  >
+                    Khôi phục mặc định
+                  </button>
+                )}
+              </div>
               <div className="relative group">
                 <textarea 
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full bg-stone-50 dark:bg-stone-950 border border-stone-100 dark:border-stone-800 rounded-2xl px-4 py-3 font-mono text-[11px] leading-relaxed min-h-[100px] focus:ring-2 focus:ring-[#C9252C]/20 focus:border-[#C9252C] outline-none transition-all resize-none"
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    setUrlError(null);
+                  }}
+                  className={`w-full bg-stone-50 dark:bg-stone-950 border rounded-2xl px-4 py-3 font-mono text-[11px] leading-relaxed min-h-[100px] focus:ring-2 focus:ring-[#C9252C]/20 focus:border-[#C9252C] outline-none transition-all resize-none ${
+                    urlError ? 'border-red-500 bg-red-50/30' : 'border-stone-100 dark:border-stone-800'
+                  }`}
                   placeholder="https://script.google.com/macros/s/..."
                 />
                 <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Database className="w-4 h-4 text-stone-300 dark:text-stone-700" />
                 </div>
               </div>
+              {urlError && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 p-3 rounded-xl flex items-start gap-2 mt-2"
+                >
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-bold text-red-700 dark:text-red-400">{urlError}</p>
+                    <button 
+                      onClick={handleRestoreDefault}
+                      className="text-[10px] font-black text-red-600 dark:text-red-500 uppercase tracking-widest hover:underline"
+                    >
+                      Bấm vào đây để dùng URL gốc
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+              <button
+                onClick={handleTestConnection}
+                disabled={isTestingConnection}
+                className="w-full py-2.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-stone-200 dark:hover:bg-stone-700 transition-all flex items-center justify-center gap-2"
+              >
+                {isTestingConnection ? (
+                  <RotateCcw className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Wifi className="w-3 h-3" />
+                )}
+                {isTestingConnection ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              </button>
             </div>
 
             <div className="pt-2 grid grid-cols-2 gap-4">

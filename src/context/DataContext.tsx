@@ -119,10 +119,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       const uniqueOrdersMap = new Map();
       if (Array.isArray(ordersData)) {
         ordersData.forEach((row: any) => {
-          const id = row.orderId || row.ma_don || row.id;
+          const id = row.ORDER_ID || row.orderId || row.ma_don || row.id || row.ma_don_hang;
           if (!id) return;
 
           if (!uniqueOrdersMap.has(id)) {
+            // Robust date parsing for "DD/MM/YYYY HH:mm:ss" or ISO
+            let timestamp = row.timestamp || row.thoi_gian || row.TIME || row.THOI_GIAN || new Date().toISOString();
+            if (typeof timestamp === 'string' && timestamp.includes('/') && timestamp.includes(':')) {
+              // Try to parse "DD/MM/YYYY HH:mm:ss"
+              const parts = timestamp.split(/[\s/:]/);
+              if (parts.length >= 6) {
+                const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]), Number(parts[3]), Number(parts[4]), Number(parts[5]));
+                if (!isNaN(d.getTime())) {
+                  timestamp = d.toISOString();
+                }
+              }
+            }
+
             // Initialize order if not exists
             uniqueOrdersMap.set(id, {
               orderId: String(id),
@@ -131,7 +144,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
               tableNumber: row.tableNumber || row.so_ban || '',
               items: [],
               total: Number(row.total || row.tong_tien || 0),
-              timestamp: row.timestamp || row.thoi_gian || new Date().toISOString(),
+              timestamp: timestamp,
               notes: row.notes || row.ghi_chu || '',
               paymentMethod: row.paymentMethod || row.thanh_toan || 'Tiền mặt',
               orderStatus: row.orderStatus || row.trang_thai || 'Chờ xử lý',
@@ -353,6 +366,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         method: 'POST',
         body: JSON.stringify({ 
           action: 'updateOrderStatus', 
+          ma_don: orderId, 
+          trang_thai: status,
+          ORDER_ID: orderId,
+          TRANG_THAI: status,
           orderId, 
           orderStatus: status,
           paymentStatus: paymentStatus,
