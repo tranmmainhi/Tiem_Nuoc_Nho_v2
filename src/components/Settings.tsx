@@ -11,7 +11,7 @@ interface SettingsProps {
 
 export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
   const { theme, toggleTheme } = useTheme();
-  const { refreshInterval, setRefreshInterval, autoSyncEnabled: dataAutoSync, setAutoSyncEnabled: setDataAutoSync } = useData();
+  const { refreshInterval, setRefreshInterval, autoSyncEnabled: dataAutoSync, setAutoSyncEnabled: setDataAutoSync, fetchAllData, syncDatabase } = useData();
   
   // Initial values for dirty checking
   const [initialSettings, setInitialSettings] = useState({
@@ -155,6 +155,27 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
                   <Database className="w-4 h-4 text-stone-300 dark:text-stone-700" />
                 </div>
               </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={async () => {
+                  const success = await syncDatabase();
+                  if (!success) {
+                    alert('Đồng bộ thất bại. Vui lòng kiểm tra lại kết nối.');
+                  } else {
+                    alert('Đồng bộ cấu trúc Database thành công!');
+                  }
+                }}
+                className="w-full flex flex-col items-center justify-center gap-2 py-6 bg-gradient-to-br from-[#C9252C] to-[#991B1B] text-white rounded-[24px] font-black shadow-xl shadow-red-200 dark:shadow-none hover:scale-[1.02] active:scale-[0.98] transition-all tap-active group relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex items-center gap-3">
+                  <RotateCcw className="w-6 h-6 animate-pulse" />
+                  <span className="text-lg uppercase tracking-wider">Sync Master Data</span>
+                </div>
+                <p className="text-[10px] font-bold opacity-70 uppercase tracking-[0.2em]">Đồng bộ cấu trúc Database</p>
+              </button>
             </div>
 
             <div className="space-y-4 pt-2">

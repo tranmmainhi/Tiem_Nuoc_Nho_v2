@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Search, RefreshCw, AlertCircle, Check, ChevronRight, Package, Settings as SettingsIcon, Filter, MoreVertical, Power, TrendingUp, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Search, RefreshCw, AlertCircle, Check, ChevronRight, Package, Settings as SettingsIcon, Filter, MoreVertical, Power, TrendingUp, Calendar as CalendarIcon, Hash, Coffee, DollarSign, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Solar, Lunar } from 'lunar-javascript';
 import { GoogleGenAI } from "@google/genai";
@@ -785,33 +785,34 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-between pt-3 border-t border-stone-50 dark:border-stone-800">
-                    <button
-                      onClick={(e) => handleToggleAvailability(item, e)}
-                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors ${
-                        item.co_san 
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400' 
-                          : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400'
-                      }`}
-                    >
-                      <Power className="w-2.5 h-2.5" />
-                      {item.co_san ? 'Tắt' : 'Bật'}
-                    </button>
-
-                    <div className="flex gap-1.5">
+                  <div className="flex items-center justify-between pt-4 border-t border-stone-50 dark:border-stone-800 mt-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => handleToggleAvailability(item, e)}
+                        className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all tap-active border ${
+                          item.co_san 
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30' 
+                            : 'bg-red-50 text-red-600 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/30'
+                        }`}
+                        title={item.co_san ? 'Tạm ngưng bán' : 'Mở bán lại'}
+                      >
+                        <Power className="w-4 h-4" />
+                      </button>
                       <button 
                         onClick={() => handleEdit(item)}
-                        className="w-8 h-8 bg-stone-50 dark:bg-stone-800 rounded-lg text-stone-500 hover:text-stone-800 dark:hover:text-white flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700"
+                        className="w-10 h-10 bg-stone-50 dark:bg-stone-800 rounded-2xl text-stone-500 hover:text-stone-800 dark:hover:text-white flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700"
+                        title="Chỉnh sửa"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(item.ma_mon)}
-                        className="w-8 h-8 bg-stone-50 dark:bg-stone-800 rounded-lg text-stone-400 hover:text-red-500 flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700 hover:border-red-200 dark:hover:border-red-900/50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
                     </div>
+                    <button 
+                      onClick={() => handleDelete(item.ma_mon)}
+                      className="w-10 h-10 bg-stone-50 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-red-600 flex items-center justify-center transition-all tap-active border border-stone-100 dark:border-stone-700 hover:border-red-200 dark:hover:border-red-900/50"
+                      title="Xóa món"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </motion.div>
               ))}
@@ -828,115 +829,157 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
               initial={{ y: "100%", opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
-              className="bg-white dark:bg-stone-900 w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border-t sm:border border-stone-100 dark:border-stone-800"
+              className="bg-white dark:bg-stone-900 w-full max-w-lg rounded-t-[40px] sm:rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border-t sm:border border-stone-100 dark:border-stone-800"
             >
-              <div className="p-6 border-b border-stone-50 dark:border-stone-800 flex justify-between items-center bg-white dark:bg-stone-900 sticky top-0 z-10">
-                <div>
-                  <h2 className="text-xl font-black text-stone-800 dark:text-white leading-none mb-1">
-                    {editingItem ? 'Sửa món' : 'Thêm món mới'}
-                  </h2>
-                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">
-                    {editingItem ? `Đang sửa: ${editingItem.ten_mon}` : 'Nhập thông tin món ăn'}
-                  </p>
+              {/* Modal Header */}
+              <div className="p-8 border-b border-stone-50 dark:border-stone-800 flex justify-between items-center bg-white dark:bg-stone-900 sticky top-0 z-10">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 text-[#C9252C] dark:text-red-400 rounded-[22px] flex items-center justify-center border border-red-100 dark:border-red-900/30">
+                    {editingItem ? <Edit2 className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-stone-800 dark:text-white leading-none mb-1">
+                      {editingItem ? 'Sửa món' : 'Thêm món mới'}
+                    </h2>
+                    <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">
+                      {editingItem ? `Đang sửa: ${editingItem.ten_mon}` : 'Nhập thông tin món ăn'}
+                    </p>
+                  </div>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 bg-stone-50 dark:bg-stone-800 rounded-xl flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors">
-                  <X className="w-5 h-5" />
+                <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors">
+                  <X className="w-6 h-6" />
                 </button>
               </div>
               
-              <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-grow scrollbar-hide">
-                {/* Show ma_mon as read-only */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Mã món</label>
-                  <input 
-                    type="text" 
-                    disabled
-                    value={formData.ma_mon || ''}
-                    className="w-full p-3 bg-stone-50 dark:bg-stone-800 rounded-xl font-mono font-bold text-stone-400 dark:text-stone-600 border-none opacity-70 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Tên món ăn</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={formData.ten_mon}
-                    onChange={e => {
-                      const newName = e.target.value;
-                      if (!editingItem) {
-                        const prefix = newName.split(' ').map(w => w.charAt(0).toUpperCase()).join('').substring(0, 3);
-                        const suffix = Date.now().toString().slice(-4);
-                        const generatedMaMon = newName ? `${prefix}-${suffix}` : `M-${suffix}`;
-                        setFormData({...formData, ten_mon: newName, ma_mon: generatedMaMon});
-                      } else {
-                        setFormData({...formData, ten_mon: newName});
-                      }
-                    }}
-                    className="w-full p-4 bg-stone-50 dark:bg-stone-800 rounded-xl font-bold text-base text-stone-800 dark:text-white border-none focus:ring-2 focus:ring-[#C9252C]/20 transition-all placeholder:font-medium"
-                    placeholder="VD: Cà phê sữa đá"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Giá bán (đ)</label>
-                  <input 
-                    type="number" 
-                    required
-                    value={formData.gia_ban === 0 ? '' : formData.gia_ban}
-                    onChange={e => setFormData({...formData, gia_ban: Number(e.target.value)})}
-                    onBlur={handlePriceBlur}
-                    className="w-full p-4 bg-stone-50 dark:bg-stone-800 rounded-xl font-black text-xl text-[#C9252C] border-none focus:ring-2 focus:ring-[#C9252C]/20 transition-all placeholder:font-medium"
-                    placeholder="0"
-                  />
-                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 italic ml-1">* Nhập 25 sẽ tự động chuyển thành 25.000đ</p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số lượng tồn kho</label>
-                  <input 
-                    type="number" 
-                    value={formData.inventoryQty}
-                    onChange={e => setFormData({...formData, inventoryQty: Number(e.target.value)})}
-                    className="w-full p-4 bg-stone-50 dark:bg-stone-800 rounded-xl font-bold text-stone-800 dark:text-white border-none focus:ring-2 focus:ring-[#C9252C]/20 transition-all placeholder:font-medium"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Danh mục</label>
-                  <div className="relative">
+              <form onSubmit={handleSubmit} className="p-8 space-y-8 overflow-y-auto flex-grow scrollbar-hide">
+                {/* Mã món Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest">Mã món định danh</label>
+                    <span className="text-[9px] font-bold text-stone-300 uppercase tracking-widest">Read-only</span>
+                  </div>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300 dark:text-stone-600">
+                      <Hash className="w-4 h-4" />
+                    </div>
                     <input 
-                      type="text"
-                      list="category-list"
-                      required
-                      value={formData.danh_muc}
-                      onChange={e => setFormData({...formData, danh_muc: e.target.value})}
-                      className="w-full p-4 bg-stone-50 dark:bg-stone-800 rounded-xl font-bold text-stone-800 dark:text-white border-none focus:ring-2 focus:ring-[#C9252C]/20 transition-all placeholder:font-medium"
-                      placeholder="Chọn hoặc nhập mới..."
+                      type="text" 
+                      disabled
+                      value={formData.ma_mon || ''}
+                      className="w-full pl-11 pr-4 py-4 bg-stone-50 dark:bg-stone-800/50 rounded-2xl font-mono font-black text-stone-400 dark:text-stone-600 border-2 border-transparent opacity-70 text-sm"
                     />
-                    <datalist id="category-list">
-                      {existingCategories.map(cat => (
-                        <option key={cat} value={cat} />
-                      ))}
-                    </datalist>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
+                {/* Tên món Section */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Tên món ăn</label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
+                      <Coffee className="w-5 h-5" />
+                    </div>
+                    <input 
+                      type="text" 
+                      required
+                      value={formData.ten_mon}
+                      onChange={e => {
+                        const newName = e.target.value;
+                        if (!editingItem) {
+                          const prefix = newName.split(' ').map(w => w.charAt(0).toUpperCase()).join('').substring(0, 3);
+                          const suffix = Date.now().toString().slice(-4);
+                          const generatedMaMon = newName ? `${prefix}-${suffix}` : `M-${suffix}`;
+                          setFormData({...formData, ten_mon: newName, ma_mon: generatedMaMon});
+                        } else {
+                          setFormData({...formData, ten_mon: newName});
+                        }
+                      }}
+                      className="w-full pl-12 pr-4 py-5 bg-stone-50 dark:bg-stone-800 rounded-2xl font-black text-lg text-stone-800 dark:text-white border-2 border-transparent focus:border-[#C9252C]/20 focus:bg-white dark:focus:bg-stone-900 transition-all placeholder:font-medium shadow-inner"
+                      placeholder="VD: Cà phê sữa đá"
+                    />
+                  </div>
+                </div>
+
+                {/* Giá bán Section */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Giá bán niêm yết</label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#C9252C]">
+                      <DollarSign className="w-6 h-6" />
+                    </div>
+                    <input 
+                      type="number" 
+                      required
+                      value={formData.gia_ban === 0 ? '' : formData.gia_ban}
+                      onChange={e => setFormData({...formData, gia_ban: Number(e.target.value)})}
+                      onBlur={handlePriceBlur}
+                      className="w-full pl-12 pr-4 py-5 bg-stone-50 dark:bg-stone-800 rounded-2xl font-black text-2xl text-[#C9252C] border-2 border-transparent focus:border-[#C9252C]/20 focus:bg-white dark:focus:bg-stone-900 transition-all placeholder:font-medium shadow-inner"
+                      placeholder="0"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-300 font-black text-xl">đ</div>
+                  </div>
+                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 italic ml-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Nhập 25 sẽ tự động chuyển thành 25.000đ
+                  </p>
+                </div>
+
+                {/* Kho & Danh mục Grid */}
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Số lượng tồn</label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <input 
+                        type="number" 
+                        value={formData.inventoryQty}
+                        onChange={e => setFormData({...formData, inventoryQty: Number(e.target.value)})}
+                        className="w-full pl-12 pr-4 py-4 bg-stone-50 dark:bg-stone-800 rounded-2xl font-black text-stone-800 dark:text-white border-2 border-transparent focus:border-[#C9252C]/20 focus:bg-white dark:focus:bg-stone-900 transition-all shadow-inner"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Danh mục</label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
+                        <Tag className="w-5 h-5" />
+                      </div>
+                      <input 
+                        type="text"
+                        list="category-list"
+                        required
+                        value={formData.danh_muc}
+                        onChange={e => setFormData({...formData, danh_muc: e.target.value})}
+                        className="w-full pl-12 pr-4 py-4 bg-stone-50 dark:bg-stone-800 rounded-2xl font-black text-stone-800 dark:text-white border-2 border-transparent focus:border-[#C9252C]/20 focus:bg-white dark:focus:bg-stone-900 transition-all shadow-inner"
+                        placeholder="Chọn..."
+                      />
+                      <datalist id="category-list">
+                        {existingCategories.map(cat => (
+                          <option key={cat} value={cat} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Toggles Section */}
+                <div className="grid grid-cols-2 gap-4">
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, co_san: !formData.co_san})}
-                    className={`p-4 rounded-2xl border transition-all duration-200 flex flex-col items-center gap-2 ${
+                    className={`p-6 rounded-[32px] border-2 transition-all duration-300 flex flex-col items-center gap-3 tap-active ${
                       formData.co_san 
-                        ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-900/50' 
+                        ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-900/30' 
                         : 'bg-stone-50 border-stone-100 dark:bg-stone-800 dark:border-stone-700'
                     }`}
                   >
-                    <div className={`w-10 h-6 rounded-full relative transition-colors duration-300 ${formData.co_san ? 'bg-emerald-500' : 'bg-stone-300 dark:bg-stone-600'}`}>
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300 ${formData.co_san ? 'left-5' : 'left-1'}`} />
+                    <div className={`w-12 h-7 rounded-full relative transition-colors duration-500 ${formData.co_san ? 'bg-emerald-500' : 'bg-stone-300 dark:bg-stone-600'}`}>
+                      <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-500 ${formData.co_san ? 'left-6' : 'left-1'}`} />
                     </div>
-                    <span className={`text-xs font-black uppercase tracking-wider ${formData.co_san ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${formData.co_san ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400'}`}>
                       {formData.co_san ? 'Đang bán' : 'Tạm ngưng'}
                     </span>
                   </button>
@@ -944,32 +987,33 @@ export function MenuManager({ appsScriptUrl }: MenuManagerProps) {
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, has_customizations: !formData.has_customizations})}
-                    className={`p-4 rounded-2xl border transition-all duration-200 flex flex-col items-center gap-2 ${
+                    className={`p-6 rounded-[32px] border-2 transition-all duration-300 flex flex-col items-center gap-3 tap-active ${
                       formData.has_customizations 
-                        ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-900/50' 
+                        ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/30' 
                         : 'bg-stone-50 border-stone-100 dark:bg-stone-800 dark:border-stone-700'
                     }`}
                   >
-                    <div className={`w-10 h-6 rounded-full relative transition-colors duration-300 ${formData.has_customizations ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'}`}>
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300 ${formData.has_customizations ? 'left-5' : 'left-1'}`} />
+                    <div className={`w-12 h-7 rounded-full relative transition-colors duration-500 ${formData.has_customizations ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'}`}>
+                      <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-500 ${formData.has_customizations ? 'left-6' : 'left-1'}`} />
                     </div>
-                    <span className={`text-xs font-black uppercase tracking-wider ${formData.has_customizations ? 'text-blue-600 dark:text-blue-400' : 'text-stone-400'}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${formData.has_customizations ? 'text-blue-600 dark:text-blue-400' : 'text-stone-400'}`}>
                       {formData.has_customizations ? 'Có Option' : 'Cơ bản'}
                     </span>
                   </button>
                 </div>
 
-                <div className="pt-4 pb-2">
+                {/* Submit Button */}
+                <div className="pt-4 pb-4">
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-4 bg-[#C9252C] text-white rounded-2xl font-black text-base uppercase tracking-widest shadow-xl shadow-red-100 dark:shadow-none tap-active flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-[#a01d23] transition-colors"
+                    className="w-full py-6 bg-gradient-to-r from-[#C9252C] to-[#991B1B] text-white rounded-[28px] font-black text-lg uppercase tracking-[0.2em] shadow-2xl shadow-red-200 dark:shadow-none tap-active flex items-center justify-center gap-3 disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98] transition-all"
                   >
                     {isSubmitting ? (
-                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <RefreshCw className="w-6 h-6 animate-spin" />
                     ) : (
                       <>
-                        <Save className="w-5 h-5" />
+                        <Save className="w-6 h-6" />
                         {editingItem ? 'Lưu thay đổi' : 'Thêm món'}
                       </>
                     )}

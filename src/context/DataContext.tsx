@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { OrderData } from '../types';
+import { OrderData, Expense } from '../types';
 
 interface MenuItem {
   id: string;
@@ -23,6 +23,7 @@ interface DataContextType {
   orders: OrderData[];
   inventoryItems: InventoryItem[];
   financeData: any[];
+  expenses: Expense[];
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -35,6 +36,7 @@ interface DataContextType {
   fetchAllData: (showFullLoader?: boolean) => Promise<void>;
   updateOrderStatus: (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => Promise<boolean>;
   createOrder: (orderData: any, showLoader?: boolean) => Promise<boolean>;
+  syncDatabase: () => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -44,6 +46,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [financeData, setFinanceData] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,15 +90,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
 
     try {
       // Fetch Menu and Orders first (Critical data)
-      const [menuRes, ordersRes] = await Promise.all([
-        fetch(`${appsScriptUrl}?action=getMenu`, { credentials: 'omit' }),
-        fetch(`${appsScriptUrl}?action=getOrders`, { credentials: 'omit' })
-      ]);
+      let menuRes, ordersRes;
+      try {
+        [menuRes, ordersRes] = await Promise.all([
+          fetch(`${appsScriptUrl}?action=getAllMenu`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) })),
+          fetch(`${appsScriptUrl}?action=getOrders`, { credentials: 'omit' }).catch(e => ({ ok: false, statusText: e.message, json: () => Promise.resolve(null) }))
+        ]);
+      } catch (e: any) {
+        console.warn('Initial fetch failed:', e);
+        menuRes = { ok: false, json: () => Promise.resolve(null) };
+        ordersRes = { ok: false, json: () => Promise.resolve(null) };
+      }
 
-      const [menuJson, ordersJson] = await Promise.all([
-        menuRes.json(),
-        ordersRes.json()
-      ]);
+      const menuJson = (menuRes as any).ok ? await (menuRes as any).json().catch(() => null) : null;
+      const ordersJson = (ordersRes as any).ok ? await (ordersRes as any).json().catch(() => null) : null;
 
       // Handle new API structure: { status: "success", data: [...] }
       const menuData = (menuJson && typeof menuJson === 'object' && Array.isArray(menuJson.data)) 
@@ -112,13 +120,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         ordersData.forEach((order: any) => {
           const id = order.orderId || order.ma_don || order.id;
           if (id) {
+            // Handle items if they are stringified JSON
+            let items = order.items;
+            if (typeof items === 'string') {
+              try {
+                items = JSON.parse(items);
+              } catch (e) {
+                items = [];
+              }
+            }
+            if (!Array.isArray(items)) items = [];
+
             // Map raw API fields to OrderData interface
             const mappedOrder: OrderData = {
               orderId: String(id),
               customerName: order.customerName || order.ten_khach_hang || 'Khách hàng',
               phoneNumber: order.phoneNumber || order.so_dien_thoai || '',
               tableNumber: order.tableNumber || order.so_ban || '',
-              items: Array.isArray(order.items) ? order.items : [],
+              items: items,
               total: Number(order.total || order.tong_tien || 0),
               timestamp: order.timestamp || order.thoi_gian || new Date().toISOString(),
               notes: order.notes || order.ghi_chu || '',
@@ -135,17 +154,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       // Try to fetch inventory, but don't block if it fails
       let inventoryData = [];
       try {
-        const inventoryRes = await fetch(`${appsScriptUrl}?action=getInventoryData`, { credentials: 'omit' });
-        if (inventoryRes.ok) {
-          const invJson = await inventoryRes.json();
-          // Handle new API structure for inventory too
-          inventoryData = (invJson && typeof invJson === 'object' && Array.isArray(invJson.data))
-            ? invJson.data
-            : (Array.isArray(invJson) ? invJson : []);
+        const inventoryRes = await fetch(`${appsScriptUrl}?action=getInventoryData`, { credentials: 'omit' }).catch(() => null);
+        if (inventoryRes && inventoryRes.ok) {
+          const invJson = await inventoryRes.json().catch(() => null);
+          
+          // Handle various structures: 
+          // 1. { status: "success", data: [...] }
+          // 2. { status: "success", data: { materials: [...], logs: [...] } }
+          // 3. [...]
+          
+          if (invJson && typeof invJson === 'object') {
+            const rawData = invJson.data || invJson;
+            if (Array.isArray(rawData)) {
+              inventoryData = rawData;
+            } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.materials)) {
+              inventoryData = rawData.materials;
+            } else {
+              inventoryData = [];
+            }
+          }
         }
       } catch (invError) {
         console.warn('Failed to fetch inventory data:', invError);
-        // Continue without inventory data
       }
 
       let inventoryMap = new Map<string, number>();
@@ -176,13 +206,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
 
       // Fetch Finance Report
       try {
-        const financeRes = await fetch(`${appsScriptUrl}?action=getFinanceReport`, { credentials: 'omit' });
-        if (financeRes.ok) {
-          const finJson = await financeRes.json();
+        const financeRes = await fetch(`${appsScriptUrl}?action=getFinanceReport`, { credentials: 'omit' }).catch(() => null);
+        if (financeRes && financeRes.ok) {
+          const finJson = await financeRes.json().catch(() => null);
           const finData = (finJson && typeof finJson === 'object' && Array.isArray(finJson.data))
             ? finJson.data
             : (Array.isArray(finJson) ? finJson : []);
           setFinanceData(finData);
+          setExpenses(finData as Expense[]);
         }
       } catch (finError) {
         console.warn('Failed to fetch finance report:', finError);
@@ -307,9 +338,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
           ...additionalData
         }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      });
-      const result = await response.json();
-      if (result.status === 'success') {
+      }).catch(() => null);
+      
+      if (!response || !response.ok) return false;
+      
+      const result = await response.json().catch(() => null);
+      if (result && result.status === 'success') {
         await fetchAllData(false); // Action-Triggered Refetch
         return true;
       }
@@ -329,9 +363,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
         method: 'POST',
         body: JSON.stringify({ action: 'createOrder', ...orderData }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      });
-      const result = await response.json();
-      if (result.status === 'success') {
+      }).catch(() => null);
+      
+      if (!response || !response.ok) return false;
+      
+      const result = await response.json().catch(() => null);
+      if (result && result.status === 'success') {
         await fetchAllData(false); // Action-Triggered Refetch
         return true;
       }
@@ -343,12 +380,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     }
   };
 
+  const syncDatabase = async () => {
+    if (!appsScriptUrl) return false;
+    setIsLoading(true);
+    try {
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'syncDatabase' }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      }).catch(() => null);
+      
+      if (!response || !response.ok) return false;
+      
+      const result = await response.json().catch(() => null);
+      if (result && result.status === 'success') {
+        await fetchAllData(false);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <DataContext.Provider value={{ 
       menuItems, 
       orders, 
       inventoryItems,
       financeData,
+      expenses,
       isLoading, 
       isRefreshing, 
       error, 
@@ -360,7 +423,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       setRefreshInterval, 
       fetchAllData,
       updateOrderStatus,
-      createOrder
+      createOrder,
+      syncDatabase
     }}>
       {children}
     </DataContext.Provider>

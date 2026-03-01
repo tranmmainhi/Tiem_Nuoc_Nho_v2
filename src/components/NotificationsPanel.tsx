@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, AlertCircle, CheckCircle2, Info, X, Clock, Wallet, AlertTriangle } from 'lucide-react';
 import { OrderData, Expense } from '../types';
 
+import { useData } from '../context/DataContext';
+
 interface NotificationsPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,6 +20,7 @@ interface AppNotification {
 }
 
 export function NotificationsPanel({ isOpen, onClose, appsScriptUrl }: NotificationsPanelProps) {
+  const { orders, expenses } = useData();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   useEffect(() => {
@@ -48,12 +51,6 @@ export function NotificationsPanel({ isOpen, onClose, appsScriptUrl }: Notificat
         time: now,
       });
     }
-
-    // Load data
-    const staffOrders: OrderData[] = JSON.parse(localStorage.getItem('staff_orders') || '[]');
-    const userOrders: OrderData[] = JSON.parse(localStorage.getItem('orderHistory') || '[]');
-    const orders = staffOrders.length > 0 ? staffOrders : userOrders;
-    const expenses: Expense[] = JSON.parse(localStorage.getItem('admin_expenses') || '[]');
 
     // 3. Order Status Notifications (Recent 10)
     const recentOrders = [...orders]
