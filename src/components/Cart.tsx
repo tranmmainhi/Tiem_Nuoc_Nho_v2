@@ -315,7 +315,7 @@ export function Cart({ appsScriptUrl, onNavigateSettings }: CartProps) {
       so_ban: tableNumber,
       thanh_toan: paymentMethod,
       so_dien_thoai: phoneNumber,
-      cart_items: cartForBackend
+      items: cartForBackend
     };
 
     try {

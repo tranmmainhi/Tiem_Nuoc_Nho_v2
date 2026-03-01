@@ -11,7 +11,7 @@ interface SettingsProps {
 
 export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
   const { theme, toggleTheme } = useTheme();
-  const { refreshInterval, setRefreshInterval, autoSyncEnabled: dataAutoSync, setAutoSyncEnabled: setDataAutoSync, fetchAllData, syncDatabase } = useData();
+  const { refreshInterval, setRefreshInterval, autoSyncEnabled: dataAutoSync, setAutoSyncEnabled: setDataAutoSync, fetchAllData, syncDatabase, setupDatabase } = useData();
   
   // Initial values for dirty checking
   const [initialSettings, setInitialSettings] = useState({
@@ -157,7 +157,7 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 grid grid-cols-2 gap-4">
               <button
                 onClick={async () => {
                   const success = await syncDatabase();
@@ -172,9 +172,29 @@ export function Settings({ appsScriptUrl, setAppsScriptUrl }: SettingsProps) {
                 <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex items-center gap-3">
                   <RotateCcw className="w-6 h-6 animate-pulse" />
-                  <span className="text-lg uppercase tracking-wider">Sync Master Data</span>
+                  <span className="text-lg uppercase tracking-wider">Sync Data</span>
                 </div>
-                <p className="text-[10px] font-bold opacity-70 uppercase tracking-[0.2em]">Đồng bộ cấu trúc Database</p>
+                <p className="text-[10px] font-bold opacity-70 uppercase tracking-[0.2em]">Đồng bộ cấu trúc</p>
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (confirm('CẢNH BÁO: Hành động này sẽ định dạng lại cơ sở dữ liệu. Bạn có chắc chắn không?')) {
+                    const success = await setupDatabase();
+                    if (!success) {
+                      alert('Định dạng thất bại. Vui lòng kiểm tra lại kết nối.');
+                    } else {
+                      alert('Định dạng Database thành công!');
+                    }
+                  }
+                }}
+                className="w-full flex flex-col items-center justify-center gap-2 py-6 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-[24px] font-black shadow-sm hover:bg-stone-200 dark:hover:bg-stone-700 hover:scale-[1.02] active:scale-[0.98] transition-all tap-active group relative overflow-hidden"
+              >
+                <div className="flex items-center gap-3">
+                  <Database className="w-6 h-6" />
+                  <span className="text-lg uppercase tracking-wider">Format DB</span>
+                </div>
+                <p className="text-[10px] font-bold opacity-70 uppercase tracking-[0.2em]">Cài đặt lại dữ liệu</p>
               </button>
             </div>
 

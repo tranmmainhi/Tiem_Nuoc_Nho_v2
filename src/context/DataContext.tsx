@@ -37,6 +37,7 @@ interface DataContextType {
   updateOrderStatus: (orderId: string, status: string, paymentStatus?: string, additionalData?: any) => Promise<boolean>;
   createOrder: (orderData: any, showLoader?: boolean) => Promise<boolean>;
   syncDatabase: () => Promise<boolean>;
+  setupDatabase: () => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -117,35 +118,55 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       // Map and Deduplicate Orders
       const uniqueOrdersMap = new Map();
       if (Array.isArray(ordersData)) {
-        ordersData.forEach((order: any) => {
-          const id = order.orderId || order.ma_don || order.id;
-          if (id) {
-            // Handle items if they are stringified JSON
-            let items = order.items;
-            if (typeof items === 'string') {
-              try {
-                items = JSON.parse(items);
-              } catch (e) {
-                items = [];
-              }
-            }
-            if (!Array.isArray(items)) items = [];
+        ordersData.forEach((row: any) => {
+          const id = row.orderId || row.ma_don || row.id;
+          if (!id) return;
 
-            // Map raw API fields to OrderData interface
-            const mappedOrder: OrderData = {
+          if (!uniqueOrdersMap.has(id)) {
+            // Initialize order if not exists
+            uniqueOrdersMap.set(id, {
               orderId: String(id),
-              customerName: order.customerName || order.ten_khach_hang || 'Khách hàng',
-              phoneNumber: order.phoneNumber || order.so_dien_thoai || '',
-              tableNumber: order.tableNumber || order.so_ban || '',
-              items: items,
-              total: Number(order.total || order.tong_tien || 0),
-              timestamp: order.timestamp || order.thoi_gian || new Date().toISOString(),
-              notes: order.notes || order.ghi_chu || '',
-              paymentMethod: order.paymentMethod || order.thanh_toan || 'Tiền mặt',
-              orderStatus: order.orderStatus || order.trang_thai || 'Chờ xử lý',
-              paymentStatus: order.paymentStatus || (order.thanh_toan === 'Chuyển khoản' ? 'Đã thanh toán' : 'Chưa thanh toán'),
-            };
-            uniqueOrdersMap.set(mappedOrder.orderId, mappedOrder);
+              customerName: row.customerName || row.ten_khach_hang || 'Khách hàng',
+              phoneNumber: row.phoneNumber || row.so_dien_thoai || '',
+              tableNumber: row.tableNumber || row.so_ban || '',
+              items: [],
+              total: Number(row.total || row.tong_tien || 0),
+              timestamp: row.timestamp || row.thoi_gian || new Date().toISOString(),
+              notes: row.notes || row.ghi_chu || '',
+              paymentMethod: row.paymentMethod || row.thanh_toan || 'Tiền mặt',
+              orderStatus: row.orderStatus || row.trang_thai || 'Chờ xử lý',
+              paymentStatus: row.paymentStatus || (row.thanh_toan === 'Chuyển khoản' ? 'Đã thanh toán' : 'Chưa thanh toán'),
+            });
+          }
+
+          // Add item to the order
+          const order = uniqueOrdersMap.get(id);
+          
+          // Check if this row actually contains item data (it should, given it's a flat list of items)
+          // Some rows might be just order headers if the backend joins differently, but assuming inner join style:
+          if (row.ten_mon || row.name) {
+             const item = {
+                id: row.ma_mon || row.id || '',
+                name: row.ten_mon || row.name || 'Món chưa đặt tên',
+                quantity: Number(row.so_luong || row.quantity || 1),
+                price: Number(row.don_gia || row.price || 0),
+                // Add other item fields if available in the flat row
+                cartItemId: `${id}-${order.items.length}`, // Generate a temporary ID
+                unitPrice: Number(row.don_gia || row.price || 0),
+                size: row.size || 'M',
+                toppings: row.toppings ? (typeof row.toppings === 'string' ? JSON.parse(row.toppings) : row.toppings) : [],
+                note: row.ghi_chu_mon || '',
+             };
+             order.items.push(item);
+          } else if (row.items) {
+             // Fallback: if the row still has an 'items' array (hybrid structure), use it
+             let items = row.items;
+             if (typeof items === 'string') {
+                try { items = JSON.parse(items); } catch (e) { items = []; }
+             }
+             if (Array.isArray(items)) {
+                order.items.push(...items);
+             }
           }
         });
       }
@@ -405,6 +426,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
     }
   };
 
+  const setupDatabase = async () => {
+    if (!appsScriptUrl) return false;
+    setIsLoading(true);
+    try {
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'setup' }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      }).catch(() => null);
+      
+      if (!response || !response.ok) return false;
+      
+      const result = await response.json().catch(() => null);
+      if (result && result.status === 'success') {
+        await fetchAllData(false);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <DataContext.Provider value={{ 
       menuItems, 
@@ -424,7 +470,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode; appsScriptUrl: 
       fetchAllData,
       updateOrderStatus,
       createOrder,
-      syncDatabase
+      syncDatabase,
+      setupDatabase
     }}>
       {children}
     </DataContext.Provider>

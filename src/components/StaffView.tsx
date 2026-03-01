@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, CheckCircle2, Clock, XCircle, Coffee, DollarSign, AlertCircle, ChevronRight, Settings as SettingsIcon, Volume2, VolumeX, Package, User, MapPin, BarChart3, TrendingUp, TrendingDown, Plus, Trash2, Calendar, LayoutDashboard, ListOrdered, Wallet, Filter, ArrowUpRight, ArrowDownRight, Menu as MenuIcon, Share2, FileText, Sparkles } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Clock, XCircle, Coffee, DollarSign, AlertCircle, ChevronRight, Settings as SettingsIcon, Volume2, VolumeX, Package, User, MapPin, BarChart3, TrendingUp, TrendingDown, Plus, Trash2, Calendar, LayoutDashboard, ListOrdered, Wallet, Filter, ArrowUpRight, ArrowDownRight, Menu as MenuIcon, Share2, FileText, Sparkles, PieChart as PieChartIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar } from 'recharts';
 import { OrderData, Expense } from '../types';
@@ -168,10 +168,8 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
         method: 'POST',
         body: JSON.stringify({
           action: 'updateInventory',
-          itemName: editingInventoryItem.name, // Assuming backend uses name to find item, or we might need ID
-          // If backend uses ID, we might need to adjust. Based on previous code, it used itemName.
-          // Let's try to send both if possible, or just itemName as per existing code.
-          // Existing code: itemName: item.name
+          itemName: editingInventoryItem.name,
+          ma_nl: editingInventoryItem.id,
           quantityChange: quantityChange
         }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -795,18 +793,18 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
             exit={{ height: 0, opacity: 0 }}
             className="px-6 pt-4 overflow-hidden"
           >
-            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 px-4 py-3 rounded-2xl flex items-center gap-3">
-              <div className="w-8 h-8 bg-amber-500 text-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Calendar className="w-4 h-4" />
+            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 px-4 py-2.5 rounded-2xl flex items-center gap-3">
+              <div className="w-7 h-7 bg-amber-500 text-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
+                <Calendar className="w-3.5 h-3.5" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-400 leading-tight">
-                  <span className="font-black uppercase tracking-widest mr-1.5">Nhắc nhở:</span>
-                  Thanh toán chi phí cố định (Tiền nhà, điện, nước...) trước ngày 05.
+                <p className="text-[10px] font-bold text-amber-800 dark:text-amber-400 leading-tight">
+                  <span className="font-black uppercase tracking-widest mr-1">Lưu ý:</span>
+                  Thanh toán chi phí cố định trước ngày 05.
                 </p>
               </div>
               <button onClick={() => setShowFixedCostReminder(false)} className="text-amber-400 hover:text-amber-600 transition-colors p-1">
-                <XCircle className="w-4 h-4" />
+                <XCircle className="w-3.5 h-3.5" />
               </button>
             </div>
           </motion.div>
@@ -840,30 +838,42 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-5"
+              className="space-y-6"
             >
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Sổ quỹ tiền mặt</h2>
+                <div className="space-y-0.5">
+                  <h2 className="text-stone-800 dark:text-white font-black text-lg tracking-tight">Sổ quỹ tiền mặt</h2>
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Kiểm soát dòng tiền</p>
+                </div>
+                <button 
+                  onClick={() => fetchAllData(false)}
+                  className="w-10 h-10 bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
+                </button>
               </div>
 
               {/* Cash Balance Card */}
-              <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-[32px] p-8 text-white shadow-xl shadow-emerald-100 dark:shadow-none relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                  <DollarSign className="w-32 h-32" />
+              <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-[40px] p-8 text-white shadow-2xl shadow-emerald-100 dark:shadow-none relative overflow-hidden">
+                <div className="absolute -right-10 -bottom-10 opacity-10">
+                  <DollarSign className="w-48 h-48" />
                 </div>
-                <div className="relative z-10 space-y-2">
-                  <div className="flex items-center gap-2 opacity-80">
-                    <Wallet className="w-5 h-5" />
-                    <span className="text-xs font-black uppercase tracking-widest">Tiền mặt tại quán</span>
+                <div className="relative z-10 space-y-6">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-md rounded-full w-fit border border-white/10">
+                    <Wallet className="w-3.5 h-3.5 text-emerald-200" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-50">Tiền mặt tại quán</span>
                   </div>
-                  <p className="text-4xl font-black tracking-tight">
-                    {(
-                      orders.filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành')).reduce((sum, o) => sum + o.total, 0) +
-                      expenses.filter(e => (e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
-                      expenses.filter(e => e.phan_loai === 'Chi').reduce((sum, e) => sum + Number(e.so_tien), 0)
-                    ).toLocaleString()}đ
-                  </p>
-                  <div className="pt-4 flex gap-3">
+                  <div className="flex items-baseline gap-1">
+                    <p className="text-5xl font-black tracking-tighter">
+                      {(
+                        orders.filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành')).reduce((sum, o) => sum + o.total, 0) +
+                        expenses.filter(e => (e.phan_loai === 'Thu' || e.phan_loai === 'Thu nhập')).reduce((sum, e) => sum + Number(e.so_tien), 0) -
+                        expenses.filter(e => e.phan_loai === 'Chi').reduce((sum, e) => sum + Number(e.so_tien), 0)
+                      ).toLocaleString()}
+                    </p>
+                    <span className="text-xl font-black text-emerald-200">đ</span>
+                  </div>
+                  <div className="pt-2 flex gap-3">
                     <button 
                       onClick={() => {
                         setExpenseType('Thu');
@@ -871,7 +881,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                         setExpenseDesc('Nạp tiền đầu ca');
                         setShowExpenseForm(true);
                       }}
-                      className="flex-1 bg-white/20 backdrop-blur-md hover:bg-white/30 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 bg-white/20 backdrop-blur-md hover:bg-white/30 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/10 tap-active"
                     >
                       <ArrowDownRight className="w-4 h-4" /> Nạp tiền
                     </button>
@@ -882,7 +892,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                         setExpenseDesc('Rút tiền cuối ca');
                         setShowExpenseForm(true);
                       }}
-                      className="flex-1 bg-white/20 backdrop-blur-md hover:bg-white/30 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 bg-white/20 backdrop-blur-md hover:bg-white/30 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-white/10 tap-active"
                     >
                       <ArrowUpRight className="w-4 h-4" /> Rút tiền
                     </button>
@@ -892,8 +902,8 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
               {/* Recent Cash Movements */}
               <div className="space-y-4">
-                <h3 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest px-1">Biến động gần đây</h3>
-                <div className="bg-white dark:bg-stone-900 rounded-[24px] border border-stone-100 dark:border-stone-800 overflow-hidden">
+                <h3 className="text-stone-400 dark:text-stone-500 font-black text-[10px] uppercase tracking-widest px-1">Biến động gần đây</h3>
+                <div className="bg-white dark:bg-stone-900 rounded-[32px] border border-stone-100 dark:border-stone-800 overflow-hidden shadow-sm">
                   {[
                     ...orders
                       .filter(o => o.paymentMethod === 'Tiền mặt' && (o.paymentStatus === 'Đã thanh toán' || o.orderStatus === 'Hoàn thành'))
@@ -917,9 +927,9 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
                   .slice(0, 20)
                   .map((item, idx) => (
-                    <div key={`cash-movement-${idx}`} className="p-4 border-b border-stone-50 dark:border-stone-800 last:border-0 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    <div key={`cash-movement-${idx}`} className="p-5 border-b border-stone-50 dark:border-stone-800 last:border-0 flex justify-between items-center hover:bg-stone-50/50 dark:hover:bg-stone-800/20 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${
                           item.type === 'order' 
                             ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-500' 
                             : item.isIn 
@@ -929,12 +939,15 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                           {item.type === 'order' ? <Coffee className="w-5 h-5" /> : (item.isIn ? <ArrowDownRight className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />)}
                         </div>
                         <div>
-                          <p className="font-bold text-stone-800 dark:text-white text-sm">{item.desc}</p>
-                          <p className="text-[10px] font-bold text-stone-400">{new Date(item.time).toLocaleString('vi-VN')}</p>
+                          <p className="font-black text-stone-800 dark:text-white text-sm tracking-tight">{item.desc}</p>
+                          <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mt-0.5">
+                            {new Date(item.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} • {new Date(item.time).toLocaleDateString('vi-VN')}
+                          </p>
                         </div>
                       </div>
-                      <span className={`font-black ${item.isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {item.isIn ? '+' : '-'}{item.amount.toLocaleString()}đ
+                      <span className={`font-black text-base tracking-tighter ${item.isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {item.isIn ? '+' : '-'}{item.amount.toLocaleString()}
+                        <span className="text-[9px] ml-0.5 uppercase">đ</span>
                       </span>
                     </div>
                   ))}
@@ -952,7 +965,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               className="space-y-6 pb-12"
             >
               {/* Main Profit Card - The "Hero" of the dashboard */}
-              <div className={`p-8 rounded-[40px] shadow-2xl shadow-stone-200 dark:shadow-none space-y-6 relative overflow-hidden transition-all duration-700 ${stats.profit >= 0 ? 'bg-gradient-to-br from-[#C9252C] to-[#991B1B]' : 'bg-gradient-to-br from-stone-800 to-stone-900'}`}>
+              <div className={`p-8 rounded-[48px] shadow-2xl shadow-stone-200 dark:shadow-none space-y-8 relative overflow-hidden transition-all duration-700 ${stats.profit >= 0 ? 'bg-gradient-to-br from-[#C9252C] to-[#991B1B]' : 'bg-gradient-to-br from-stone-800 to-stone-900'}`}>
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">
                   <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -961,14 +974,14 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                 </div>
                 
                 <div className="flex justify-between items-start relative z-10">
-                  <div className="w-14 h-14 bg-white/20 backdrop-blur-xl text-white rounded-[22px] flex items-center justify-center border border-white/20 shadow-inner">
-                    <Wallet className="w-7 h-7" />
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-xl text-white rounded-[24px] flex items-center justify-center border border-white/20 shadow-inner">
+                    <Wallet className="w-8 h-8" />
                   </div>
                   <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-full backdrop-blur-md border border-white/10 text-white bg-white/10">
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] px-5 py-2.5 rounded-full backdrop-blur-md border border-white/10 text-white bg-white/10">
                       Lợi nhuận ròng
                     </span>
-                    <div className="mt-2 flex items-center gap-1 text-white/60 text-[10px] font-black uppercase tracking-widest">
+                    <div className="mt-3 flex items-center gap-1.5 text-white/60 text-[9px] font-black uppercase tracking-[0.2em]">
                       <Clock className="w-3 h-3" />
                       {timeRange === 'day' ? 'Hôm nay' : timeRange === 'week' ? '7 ngày' : timeRange === 'month' ? 'Tháng này' : 'Năm nay'}
                     </div>
@@ -976,14 +989,14 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                 </div>
                 
                 <div className="relative z-10">
-                  <div className="flex items-baseline gap-1">
-                    <p className="text-5xl font-black text-white tracking-tighter">{stats.profit.toLocaleString()}</p>
-                    <span className="text-xl font-black text-white/60">đ</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-6xl font-black text-white tracking-tighter">{stats.profit.toLocaleString()}</p>
+                    <span className="text-2xl font-black text-white/60">đ</span>
                   </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    <div className="flex -space-x-2">
+                  <div className="mt-6 flex items-center gap-4">
+                    <div className="flex -space-x-2.5">
                       {[1, 2, 3].map(i => (
-                        <div key={i} className="w-6 h-6 rounded-full border-2 border-[#C9252C] bg-white/20 backdrop-blur-sm" />
+                        <div key={i} className="w-7 h-7 rounded-full border-2 border-[#C9252C] bg-white/20 backdrop-blur-sm shadow-sm" />
                       ))}
                     </div>
                     <p className="text-[11px] font-bold text-white/80">
@@ -995,7 +1008,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                 {/* Growth Indicator */}
                 {Math.abs(stats.growth) > 0 && (
                   <div className="absolute bottom-0 right-0 p-8 z-10">
-                    <div className={`flex items-center gap-1 text-xs font-black px-4 py-2 rounded-2xl backdrop-blur-md border border-white/10 ${stats.growth >= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                    <div className={`flex items-center gap-1.5 text-[10px] font-black px-5 py-2.5 rounded-2xl backdrop-blur-md border border-white/10 ${stats.growth >= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
                       {stats.growth >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                       {Math.abs(stats.growth).toFixed(1)}%
                     </div>
@@ -1004,16 +1017,16 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               </div>
 
               {/* AI Insight Section */}
-              <div className="bg-white dark:bg-stone-900 p-8 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-6 relative overflow-hidden group">
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-red-50 dark:bg-red-900/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
+              <div className="bg-white dark:bg-stone-900 p-8 rounded-[48px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-6 relative overflow-hidden group">
+                <div className="absolute -right-10 -top-10 w-48 h-48 bg-red-50 dark:bg-red-900/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
                 <div className="flex items-center justify-between relative z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-red-50 dark:bg-red-900/20 text-[#C9252C] rounded-2xl flex items-center justify-center border border-red-100 dark:border-red-900/30">
-                      <Sparkles className="w-6 h-6" />
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 text-[#C9252C] rounded-[22px] flex items-center justify-center border border-red-100 dark:border-red-900/30 shadow-sm">
+                      <Sparkles className="w-7 h-7" />
                     </div>
                     <div>
                       <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-widest">AI Insight</h3>
-                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Phân tích kinh doanh thông minh</p>
+                      <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mt-1">Phân tích kinh doanh thông minh</p>
                     </div>
                   </div>
                   <button 
@@ -1030,71 +1043,71 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                       });
                       alert(response.text);
                     }}
-                    className="px-4 py-2 bg-stone-50 dark:bg-stone-800 text-[#C9252C] rounded-xl text-[10px] font-black uppercase tracking-widest border border-stone-100 dark:border-stone-700 tap-active hover:bg-red-50 transition-colors"
+                    className="px-5 py-2.5 bg-stone-50 dark:bg-stone-800 text-[#C9252C] rounded-2xl text-[9px] font-black uppercase tracking-widest border border-stone-100 dark:border-stone-700 tap-active hover:bg-red-50 transition-all active:scale-95"
                   >
-                    Phân tích ngay
+                    Phân tích
                   </button>
                 </div>
-                <div className="p-4 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-100 dark:border-stone-700/50 relative z-10">
+                <div className="p-5 bg-stone-50 dark:bg-stone-800/50 rounded-[24px] border border-stone-100 dark:border-stone-700/50 relative z-10">
                   <p className="text-xs text-stone-500 dark:text-stone-400 font-medium leading-relaxed italic">
-                    "Nhấn 'Phân tích ngay' để nhận lời khuyên từ AI về tình hình kinh doanh của quán bạn nhé! ✨"
+                    "Nhấn 'Phân tích' để nhận lời khuyên từ AI về tình hình kinh doanh của quán bạn nhé! ✨"
                   </p>
                 </div>
               </div>
 
               {/* Bento Grid Stats */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white dark:bg-stone-900 p-6 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 space-y-4 relative overflow-hidden group">
+                <div className="bg-white dark:bg-stone-900 p-6 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 space-y-4 relative overflow-hidden group">
                   <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 dark:bg-emerald-900/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                  <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6" />
+                  <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-[20px] flex items-center justify-center">
+                    <TrendingUp className="w-7 h-7" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Doanh thu</p>
-                    <p className="text-2xl font-black text-stone-800 dark:text-white tracking-tight">{stats.revenue.toLocaleString()}đ</p>
+                    <p className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Doanh thu</p>
+                    <p className="text-2xl font-black text-stone-800 dark:text-white tracking-tighter">{stats.revenue.toLocaleString()}đ</p>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-stone-900 p-6 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 space-y-4 relative overflow-hidden group">
+                <div className="bg-white dark:bg-stone-900 p-6 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md transition-all duration-300 space-y-4 relative overflow-hidden group">
                   <div className="absolute -right-4 -top-4 w-24 h-24 bg-red-50 dark:bg-red-900/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                  <div className="w-12 h-12 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center">
-                    <TrendingDown className="w-6 h-6" />
+                  <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-[20px] flex items-center justify-center">
+                    <TrendingDown className="w-7 h-7" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Chi tiêu</p>
-                    <p className="text-2xl font-black text-stone-800 dark:text-white tracking-tight">{stats.cost.toLocaleString()}đ</p>
+                    <p className="text-[9px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest mb-1">Chi tiêu</p>
+                    <p className="text-2xl font-black text-stone-800 dark:text-white tracking-tighter">{stats.cost.toLocaleString()}đ</p>
                   </div>
                 </div>
               </div>
 
               {/* Monthly Performance Section */}
-              <div className="bg-white dark:bg-stone-900 p-8 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-8">
+              <div className="bg-white dark:bg-stone-900 p-8 rounded-[48px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-8">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-widest">Hiệu suất tháng {new Date().getMonth() + 1}</h3>
-                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Phân tích doanh thu & chi phí</p>
+                    <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mt-1">Phân tích doanh thu & chi phí</p>
                   </div>
-                  <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center">
-                    <BarChart3 className="w-6 h-6 text-stone-400" />
+                  <div className="w-14 h-14 bg-stone-50 dark:bg-stone-800 rounded-[22px] flex items-center justify-center">
+                    <BarChart3 className="w-7 h-7 text-stone-400" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Doanh thu</p>
-                    <p className="text-sm font-black text-emerald-600">{stats.monthlyRevenue.toLocaleString()}đ</p>
+                  <div className="space-y-1.5">
+                    <p className="text-[8px] font-black text-stone-400 uppercase tracking-widest">Doanh thu</p>
+                    <p className="text-sm font-black text-emerald-600 tracking-tight">{stats.monthlyRevenue.toLocaleString()}đ</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Chi phí</p>
-                    <p className="text-sm font-black text-red-600">{stats.monthlyCost.toLocaleString()}đ</p>
+                  <div className="space-y-1.5">
+                    <p className="text-[8px] font-black text-stone-400 uppercase tracking-widest">Chi phí</p>
+                    <p className="text-sm font-black text-red-600 tracking-tight">{stats.monthlyCost.toLocaleString()}đ</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Lợi nhuận</p>
-                    <p className={`text-sm font-black ${stats.monthlyProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{stats.monthlyProfit.toLocaleString()}đ</p>
+                  <div className="space-y-1.5">
+                    <p className="text-[8px] font-black text-stone-400 uppercase tracking-widest">Lợi nhuận</p>
+                    <p className={`text-sm font-black tracking-tight ${stats.monthlyProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{stats.monthlyProfit.toLocaleString()}đ</p>
                   </div>
                 </div>
 
-                <div className="h-[300px] w-full pt-4">
+                <div className="h-[320px] w-full pt-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.monthlyExpenseChartData} layout="vertical" margin={{ left: 20 }}>
                       <CartesianGrid strokeDasharray="8 8" horizontal={false} stroke="#f5f5f5" />
@@ -1104,7 +1117,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                         dataKey="name" 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fontSize: 10, fontWeight: 800, fill: '#78716c' }}
+                        tick={{ fontSize: 9, fontWeight: 900, fill: '#a8a29e', textAnchor: 'end' }}
                         width={100}
                       />
                       <Tooltip 
@@ -1113,45 +1126,45 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                           borderRadius: '24px', 
                           border: 'none', 
                           boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', 
-                          fontWeight: 800,
-                          fontSize: '12px',
+                          fontWeight: 900,
+                          fontSize: '11px',
                           padding: '16px'
                         }}
                         formatter={(value: number) => [value.toLocaleString() + 'đ', 'Số tiền']}
                       />
-                      <Bar dataKey="value" fill="#C9252C" radius={[0, 12, 12, 0]} barSize={32} />
+                      <Bar dataKey="value" fill="#C9252C" radius={[0, 14, 14, 0]} barSize={36} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
               {/* Inventory Forecast Section */}
-              <div className="bg-white dark:bg-stone-900 p-8 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-6">
+              <div className="bg-white dark:bg-stone-900 p-8 rounded-[48px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-8">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-widest">Dự báo tồn kho</h3>
-                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Dựa trên tiêu thụ 7 ngày qua</p>
+                    <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mt-1">Dựa trên tiêu thụ 7 ngày qua</p>
                   </div>
-                  <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center">
-                    <Package className="w-6 h-6 text-stone-400" />
+                  <div className="w-14 h-14 bg-stone-50 dark:bg-stone-800 rounded-[22px] flex items-center justify-center">
+                    <Package className="w-7 h-7 text-stone-400" />
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   {stats.inventoryForecast.slice(0, 3).map((item, idx) => (
-                    <div key={`forecast-${idx}`} className="flex items-center justify-between p-4 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-100 dark:border-stone-700/50">
-                      <div className="space-y-1">
-                        <p className="text-sm font-black text-stone-800 dark:text-white">{item.name}</p>
+                    <div key={`forecast-${idx}`} className="flex items-center justify-between p-5 bg-stone-50 dark:bg-stone-800/50 rounded-[24px] border border-stone-100 dark:border-stone-700/50">
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-black text-stone-800 dark:text-white tracking-tight">{item.name}</p>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Còn: {item.currentQty}</span>
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest ${item.status === 'low' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                          <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Còn: {item.currentQty}</span>
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest ${item.status === 'low' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
                             {item.status === 'low' ? 'Sắp hết' : 'Ổn định'}
                           </span>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Cần nhập</p>
-                        <p className={`text-sm font-black ${item.suggestedRestock > 0 ? 'text-[#C9252C]' : 'text-emerald-600'}`}>
+                        <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1">Cần nhập</p>
+                        <p className={`text-base font-black tracking-tighter ${item.suggestedRestock > 0 ? 'text-[#C9252C]' : 'text-emerald-600'}`}>
                           {item.suggestedRestock > 0 ? `+${item.suggestedRestock}` : '0'}
                         </p>
                       </div>
@@ -1159,7 +1172,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   ))}
                   <button 
                     onClick={() => setViewMode('inventory')}
-                    className="w-full py-4 rounded-2xl border-2 border-dashed border-stone-200 dark:border-stone-800 text-stone-400 dark:text-stone-500 text-[10px] font-black uppercase tracking-widest hover:border-[#C9252C] hover:text-[#C9252C] transition-all"
+                    className="w-full py-5 rounded-[24px] border-2 border-dashed border-stone-200 dark:border-stone-800 text-stone-400 dark:text-stone-500 text-[9px] font-black uppercase tracking-[0.2em] hover:border-[#C9252C] hover:text-[#C9252C] transition-all tap-active active:scale-95"
                   >
                     Xem chi tiết kho
                   </button>
@@ -1168,9 +1181,9 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
               {/* Charts Section */}
               <div className="space-y-6">
-                <div className="bg-white dark:bg-stone-900 p-6 rounded-[24px] border border-stone-100 dark:border-stone-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-none">
-                  <h3 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest mb-6">Phân bổ chi tiêu</h3>
-                  <div className="h-64 relative min-h-[256px]">
+                <div className="bg-white dark:bg-stone-900 p-8 rounded-[48px] border border-stone-100 dark:border-stone-800 shadow-sm">
+                  <h3 className="text-stone-400 dark:text-stone-500 font-black text-[10px] uppercase tracking-widest mb-8">Phân bổ chi tiêu</h3>
+                  <div className="h-72 relative min-h-[288px]">
                     {stats.expenseData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -1178,9 +1191,9 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                             data={stats.expenseData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={5}
+                            innerRadius={70}
+                            outerRadius={95}
+                            paddingAngle={8}
                             dataKey="value"
                             stroke="none"
                           >
@@ -1189,35 +1202,18 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                             ))}
                           </Pie>
                           <Tooltip 
-                            contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', padding: '12px 16px', fontWeight: 'bold'}} 
+                            contentStyle={{borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '16px', fontWeight: 'black', fontSize: '11px'}} 
                             itemStyle={{color: '#1c1917'}}
                           />
                         </PieChart>
                       </ResponsiveContainer>
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-300 dark:text-stone-600">
-                        <Wallet className="w-10 h-10 mb-2 opacity-50" />
-                        <span className="text-xs font-bold">Chưa có dữ liệu chi tiêu</span>
-                      </div>
-                    )}
-                    {stats.expenseData.length > 0 && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-3xl font-black text-stone-800 dark:text-white">{stats.expenseData.length}</span>
-                        <span className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">Danh mục</span>
+                        <Wallet className="w-12 h-12 mb-3 opacity-30" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Chưa có dữ liệu chi tiêu</span>
                       </div>
                     )}
                   </div>
-                  {stats.expenseData.length > 0 && (
-                    <div className="grid grid-cols-2 gap-3 mt-6">
-                      {stats.expenseData.map((entry, index) => (
-                        <div key={index} className="flex items-center gap-2 bg-stone-50 dark:bg-stone-800 p-2 rounded-xl">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                          <span className="text-xs font-bold text-stone-600 dark:text-stone-300 truncate flex-grow">{entry.name}</span>
-                          <span className="text-[10px] font-black text-stone-400 dark:text-stone-500">{((entry.value / stats.cost) * 100).toFixed(0)}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1263,14 +1259,17 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-5"
+              className="space-y-6"
             >
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Quản lý đơn hàng</h2>
+                <div className="space-y-0.5">
+                  <h2 className="text-stone-800 dark:text-white font-black text-lg tracking-tight">Đơn hàng</h2>
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Quản lý & Vận hành</p>
+                </div>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setShowSettings(!showSettings)}
-                    className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all tap-active ${
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all tap-active ${
                       showSettings ? 'bg-stone-900 dark:bg-white text-white dark:text-black shadow-xl' : 'bg-white dark:bg-stone-900 text-stone-400 dark:text-stone-500 border border-stone-100 dark:border-stone-800 shadow-sm'
                     }`}
                   >
@@ -1278,39 +1277,40 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                   </button>
                   <button 
                     onClick={() => fetchAllData(false)}
-                    className="w-10 h-10 bg-white dark:bg-stone-900 rounded-[14px] border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
+                    className="w-10 h-10 bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
                   >
                     <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
                   </button>
                 </div>
               </div>
 
-              {/* Status Filter Pills */}
-                <div className="flex gap-2 overflow-x-auto pb-2 -mx-5 px-5 scroll-smooth">
+              {/* Status Filter Pills - Sticky */}
+              <div className="sticky top-0 z-30 -mx-6 px-6 py-2 bg-stone-50/80 dark:bg-black/80 backdrop-blur-md">
+                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
                   {[
                     { id: 'All', label: 'Tất cả', count: orders.length, color: 'bg-stone-500' },
-                    { id: 'Chờ xử lý', label: 'Chờ xử lý', count: orders.filter(o => o.orderStatus === 'Chờ xử lý').length, color: 'bg-amber-500' },
-                    { id: 'Đã nhận', label: 'Đã nhận', count: orders.filter(o => o.orderStatus === 'Đã nhận').length, color: 'bg-amber-500' },
-                    { id: 'Đang làm', label: 'Đang làm', count: orders.filter(o => o.orderStatus === 'Đang làm').length, color: 'bg-blue-500' },
-                    { id: 'Hoàn thành', label: 'Hoàn thành', count: orders.filter(o => o.orderStatus === 'Hoàn thành').length, color: 'bg-[#C9252C]' },
-                    { id: 'Đã hủy', label: 'Đã hủy', count: orders.filter(o => o.orderStatus === 'Đã hủy').length, color: 'bg-red-500' },
+                    { id: 'Chờ xử lý', label: 'Mới', count: orders.filter(o => o.orderStatus === 'Chờ xử lý').length, color: 'bg-amber-500' },
+                    { id: 'Đã nhận', label: 'Nhận', count: orders.filter(o => o.orderStatus === 'Đã nhận').length, color: 'bg-amber-500' },
+                    { id: 'Đang làm', label: 'Làm', count: orders.filter(o => o.orderStatus === 'Đang làm').length, color: 'bg-blue-500' },
+                    { id: 'Hoàn thành', label: 'Xong', count: orders.filter(o => o.orderStatus === 'Hoàn thành').length, color: 'bg-[#C9252C]' },
+                    { id: 'Đã hủy', label: 'Hủy', count: orders.filter(o => o.orderStatus === 'Đã hủy').length, color: 'bg-red-500' },
                   ].map((status) => {
                     const isSelected = filterStatus === status.id;
                     return (
                       <button
                         key={status.id}
-                        onClick={() => setFilterStatus(status.id)}
-                        className={`px-4 py-2.5 rounded-[16px] whitespace-nowrap text-[10px] font-black uppercase tracking-widest transition-all tap-active flex items-center gap-2 border ${
+                        onClick={() => {
+                          setFilterStatus(status.id);
+                          setCurrentPage(1);
+                        }}
+                        className={`px-4 py-2.5 rounded-2xl whitespace-nowrap text-[10px] font-black uppercase tracking-widest transition-all tap-active flex items-center gap-2 border ${
                           isSelected
-                            ? `${status.color} text-white border-transparent shadow-[0_8px_20px_-4px_rgba(0,0,0,0.2)] scale-105 z-10`
-                            : 'bg-white dark:bg-stone-900 text-stone-400 dark:text-stone-500 border-stone-100 dark:border-stone-800 shadow-sm hover:bg-stone-50 dark:hover:bg-stone-800'
+                            ? `${status.color} text-white border-transparent shadow-lg shadow-stone-200 dark:shadow-none scale-105`
+                            : 'bg-white dark:bg-stone-900 text-stone-400 dark:text-stone-500 border-stone-100 dark:border-stone-800 shadow-sm'
                         }`}
                       >
-                        {status.color && (
-                          <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : status.color}`} />
-                        )}
                         {status.label}
-                        <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[9px] ${
+                        <span className={`px-1.5 py-0.5 rounded-md text-[9px] ${
                           isSelected ? 'bg-white/20 text-white' : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400'
                         }`}>
                           {status.count}
@@ -1319,16 +1319,21 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                     );
                   })}
                 </div>
+              </div>
 
               {showSettings && (
-                <div className="card p-6 shadow-xl space-y-6 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-5 bg-white dark:bg-stone-900 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-xl space-y-4"
+                >
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Làm mới</label>
+                      <label className="text-[9px] font-black text-stone-400 uppercase tracking-widest ml-1">Làm mới</label>
                       <select 
                         value={refreshInterval}
                         onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                        className="w-full bg-stone-50 dark:bg-stone-800 border-none rounded-2xl px-4 py-3 text-sm font-bold text-stone-800 dark:text-white focus:ring-2 focus:ring-[#C9252C]/20"
+                        className="w-full bg-stone-50 dark:bg-stone-800 border-none rounded-2xl px-4 py-3 text-xs font-bold text-stone-800 dark:text-white focus:ring-2 focus:ring-[#C9252C]/20"
                       >
                         <option value={10}>10 giây</option>
                         <option value={30}>30 giây</option>
@@ -1336,73 +1341,74 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-stone-400 dark:text-stone-500 uppercase tracking-widest ml-1">Sắp xếp</label>
+                      <label className="text-[9px] font-black text-stone-400 uppercase tracking-widest ml-1">Sắp xếp</label>
                       <select 
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value as any)}
-                        className="w-full bg-stone-50 dark:bg-stone-800 border-none rounded-2xl px-4 py-3 text-sm font-bold text-stone-800 dark:text-white focus:ring-2 focus:ring-[#C9252C]/20"
+                        className="w-full bg-stone-50 dark:bg-stone-800 border-none rounded-2xl px-4 py-3 text-xs font-bold text-stone-800 dark:text-white focus:ring-2 focus:ring-[#C9252C]/20"
                       >
                         <option value="time">Mới nhất</option>
                         <option value="status">Trạng thái</option>
                       </select>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               <div className="space-y-4">
                 {orders.length === 0 ? (
-                  <div className="text-center py-20 flex flex-col items-center justify-center">
-                    <div className="w-16 h-16 bg-stone-50 dark:bg-stone-800 rounded-[24px] flex items-center justify-center mb-4 text-stone-300 dark:text-stone-600">
-                      <Package className="w-8 h-8" />
+                  <div className="text-center py-24 flex flex-col items-center justify-center">
+                    <div className="w-20 h-20 bg-stone-100 dark:bg-stone-800 rounded-[32px] flex items-center justify-center mb-6 text-stone-300 dark:text-stone-600">
+                      <Package className="w-10 h-10" />
                     </div>
-                    <p className="text-stone-400 dark:text-stone-500 font-bold">Chưa có đơn hàng nào</p>
+                    <h3 className="text-lg font-black text-stone-800 dark:text-white tracking-tight">Trống trải quá...</h3>
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mt-2">Chưa có đơn hàng nào</p>
                   </div>
                 ) : (
                   orders
                     .filter(order => filterStatus === 'All' || order.orderStatus === filterStatus)
                     .slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-                    .map((order, index) => {
+                    .map((order) => {
                     const isNew = (order.orderStatus === 'Đã nhận' || order.orderStatus === 'Chờ xử lý') && 
                                   (currentTime.getTime() - new Date(order.timestamp).getTime()) < 60000;
                     
                     return (
                       <motion.div 
                         key={`order-item-${order.orderId}`}
-                        initial={{ opacity: 0, scale: 0.95 }}
+                        initial={{ opacity: 0, scale: 0.98 }}
                         animate={{ opacity: 1, scale: 1 }}
                         className={`bg-white dark:bg-stone-900 rounded-[32px] overflow-hidden border-2 transition-all duration-300 ${
-                          isNew ? 'border-[#C9252C] shadow-xl shadow-red-100 dark:shadow-none' : 'border-stone-100 dark:border-stone-800 shadow-sm'
+                          isNew ? 'border-[#C9252C] shadow-2xl shadow-red-100 dark:shadow-none' : 'border-stone-100 dark:border-stone-800 shadow-sm'
                         }`}
                       >
                         {/* Card Header */}
-                        <div className="p-5 flex justify-between items-start border-b border-stone-50 dark:border-stone-800">
+                        <div className="p-5 flex justify-between items-start border-b border-stone-50 dark:border-stone-800/50">
                           <div className="flex items-center gap-3">
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
+                            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm ${
                               order.orderStatus === 'Hoàn thành' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' :
                               order.orderStatus === 'Đã hủy' ? 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400' :
                               order.orderStatus === 'Đang làm' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' :
                               'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400'
                             }`}>
-                              {order.orderStatus === 'Hoàn thành' ? <CheckCircle2 className="w-6 h-6" /> :
-                               order.orderStatus === 'Đã hủy' ? <XCircle className="w-6 h-6" /> :
-                               order.orderStatus === 'Đang làm' ? <Coffee className="w-6 h-6" /> :
-                               <Clock className="w-6 h-6" />}
+                              {order.orderStatus === 'Hoàn thành' ? <CheckCircle2 className="w-5 h-5" /> :
+                               order.orderStatus === 'Đã hủy' ? <XCircle className="w-5 h-5" /> :
+                               order.orderStatus === 'Đang làm' ? <Coffee className="w-5 h-5" /> :
+                               <Clock className="w-5 h-5" />}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">#{order.orderId}</span>
-                                {isNew && <span className="w-2 h-2 bg-[#C9252C] rounded-full animate-ping" />}
+                                <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest">#{order.orderId}</span>
+                                {isNew && <span className="w-1.5 h-1.5 bg-[#C9252C] rounded-full animate-pulse" />}
                               </div>
-                              <h3 className="font-black text-stone-800 dark:text-white text-lg tracking-tight">{order.customerName}</h3>
+                              <h3 className="font-black text-stone-800 dark:text-white text-base tracking-tight">{order.customerName}</h3>
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="flex items-baseline justify-end gap-1">
-                              <span className="text-2xl font-black text-[#C9252C] tracking-tighter">{order.total.toLocaleString()}</span>
-                              <span className="text-[10px] font-black text-[#C9252C]/60 uppercase">đ</span>
+                            <div className="flex items-baseline justify-end gap-0.5">
+                              <span className="text-xl font-black text-[#C9252C] tracking-tighter">{order.total.toLocaleString()}</span>
+                              <span className="text-[9px] font-black text-[#C9252C]/60 uppercase">đ</span>
                             </div>
-                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">
+                            <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mt-0.5">
                               {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
@@ -1414,12 +1420,12 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                           <div className="flex flex-wrap gap-2">
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700">
                               <MapPin className="w-3 h-3 text-stone-400" />
-                              <span className="text-[10px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-widest">{order.tableNumber || 'Mang đi'}</span>
+                              <span className="text-[9px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-widest">{order.tableNumber || 'Mang đi'}</span>
                             </div>
                             {order.phoneNumber && (
                               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700">
                                 <User className="w-3 h-3 text-stone-400" />
-                                <span className="text-[10px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-widest">{order.phoneNumber}</span>
+                                <span className="text-[9px] font-black text-stone-600 dark:text-stone-300 uppercase tracking-widest">{order.phoneNumber}</span>
                               </div>
                             )}
                             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${
@@ -1428,16 +1434,16 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                                 : 'bg-amber-50 border-amber-100 text-amber-600 dark:bg-amber-900/10 dark:border-amber-900/30 dark:text-amber-400'
                             }`}>
                               <DollarSign className="w-3 h-3" />
-                              <span className="text-[10px] font-black uppercase tracking-widest">{order.paymentStatus || 'Chưa trả'}</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest">{order.paymentStatus || 'Chưa trả'}</span>
                             </div>
                           </div>
 
                           {/* Items List */}
-                          <div className="space-y-2">
+                          <div className="space-y-2.5">
                             {order.items.map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center justify-between group">
+                              <div key={idx} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-7 h-7 bg-stone-50 dark:bg-stone-800 rounded-lg flex items-center justify-center text-stone-400 font-black text-[10px] border border-stone-100 dark:border-stone-700">
+                                  <div className="w-7 h-7 bg-stone-50 dark:bg-stone-800 rounded-lg flex items-center justify-center text-stone-500 font-black text-[10px] border border-stone-100 dark:border-stone-700 shadow-inner">
                                     {item.quantity}
                                   </div>
                                   <div>
@@ -1445,12 +1451,11 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                                     {item.note && <p className="text-[10px] text-stone-400 font-medium italic mt-1">"{item.note}"</p>}
                                   </div>
                                 </div>
-                                <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-md border border-stone-100 dark:border-stone-700">{item.size}</span>
+                                <span className="text-[8px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-2 py-1 rounded-md border border-stone-100 dark:border-stone-700">{item.size}</span>
                               </div>
                             ))}
                           </div>
 
-                          {/* Order Note if any */}
                           {order.notes && (
                             <div className="p-3 bg-red-50/50 dark:bg-red-900/5 rounded-2xl border border-red-100/50 dark:border-red-900/10">
                               <p className="text-[10px] font-bold text-[#C9252C] italic flex items-center gap-2">
@@ -1462,13 +1467,13 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                         </div>
 
                         {/* Card Actions */}
-                        <div className="p-5 bg-stone-50/50 dark:bg-stone-800/20 border-t border-stone-50 dark:border-stone-800 flex gap-3">
+                        <div className="p-5 bg-stone-50/30 dark:bg-stone-800/10 border-t border-stone-50 dark:border-stone-800/50 flex gap-3">
                           {order.orderStatus !== 'Hoàn thành' && order.orderStatus !== 'Đã hủy' && (
                             <>
                               {order.orderStatus !== 'Đang làm' && (
                                 <button 
                                   onClick={() => updateStatus(order.orderId, 'Đang làm')}
-                                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 dark:shadow-none tap-active hover:bg-blue-700 transition-all"
+                                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 dark:shadow-none tap-active hover:bg-blue-700 transition-all active:scale-95"
                                 >
                                   Làm món
                                 </button>
@@ -1479,7 +1484,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                                     updateStatus(order.orderId, 'Hoàn thành', 'Đã thanh toán');
                                   }
                                 }}
-                                className="flex-1 py-4 bg-[#C9252C] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-200 dark:shadow-none tap-active hover:bg-red-700 transition-all"
+                                className="flex-1 py-4 bg-[#C9252C] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-200 dark:shadow-none tap-active hover:bg-red-700 transition-all active:scale-95"
                               >
                                 Hoàn thành
                               </button>
@@ -1489,7 +1494,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                           <div className="flex gap-2">
                             <button 
                               onClick={() => setSelectedOrderForInvoice(order)}
-                              className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-[#C9252C] transition-all"
+                              className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-[#C9252C] transition-all active:scale-95"
                             >
                               <Share2 className="w-5 h-5" />
                             </button>
@@ -1501,7 +1506,7 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                                     updateStatus(order.orderId, 'Đã hủy', undefined, { cart_items: cartItemsPayload });
                                   }
                                 }}
-                                className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-red-600 transition-all"
+                                className="w-12 h-12 bg-white dark:bg-stone-800 text-stone-400 rounded-2xl border border-stone-100 dark:border-stone-700 flex items-center justify-center tap-active hover:text-red-600 transition-all active:scale-95"
                               >
                                 <XCircle className="w-5 h-5" />
                               </button>
@@ -1516,23 +1521,32 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
               {/* Pagination Controls */}
               {orders.filter(order => filterStatus === 'All' || order.orderStatus === filterStatus).length > ITEMS_PER_PAGE && (
-                <div className="flex items-center justify-between pt-4 pb-2">
+                <div className="flex items-center justify-between pt-6 pb-4">
                   <button 
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(1, prev - 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 bg-stone-50 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed tap-active"
+                    className="w-12 h-12 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 text-stone-600 dark:text-stone-300 rounded-2xl flex items-center justify-center disabled:opacity-30 tap-active shadow-sm"
                   >
-                    Trang trước
+                    <ChevronRight className="w-5 h-5 rotate-180" />
                   </button>
-                  <span className="text-stone-500 dark:text-stone-400 font-bold text-sm">
-                    Trang {currentPage} / {Math.ceil(orders.filter(order => filterStatus === 'All' || order.orderStatus === filterStatus).length / ITEMS_PER_PAGE)}
-                  </span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Trang</span>
+                    <span className="text-sm font-black text-stone-800 dark:text-white">
+                      {currentPage} <span className="text-stone-300 mx-1">/</span> {Math.ceil(orders.filter(order => filterStatus === 'All' || order.orderStatus === filterStatus).length / ITEMS_PER_PAGE)}
+                    </span>
+                  </div>
                   <button 
-                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(orders.filter(order => filterStatus === 'All' || order.orderStatus === filterStatus).length / ITEMS_PER_PAGE), prev + 1))}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.min(Math.ceil(orders.filter(order => filterStatus === 'All' || order.orderStatus === filterStatus).length / ITEMS_PER_PAGE), prev + 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     disabled={currentPage === Math.ceil(orders.filter(order => filterStatus === 'All' || order.orderStatus === filterStatus).length / ITEMS_PER_PAGE)}
-                    className="px-4 py-2 bg-stone-50 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-xl font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed tap-active"
+                    className="w-12 h-12 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 text-stone-600 dark:text-stone-300 rounded-2xl flex items-center justify-center disabled:opacity-30 tap-active shadow-sm"
                   >
-                    Trang sau
+                    <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
               )}
@@ -1545,45 +1559,53 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-5"
+              className="space-y-6"
             >
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Báo cáo tài chính (FINANCE_REPORT)</h2>
+                <div className="space-y-0.5">
+                  <h2 className="text-stone-800 dark:text-white font-black text-lg tracking-tight">Báo cáo tài chính</h2>
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Dữ liệu chi tiết đơn hàng</p>
+                </div>
                 <button 
                   onClick={() => fetchAllData(false)}
-                  className="w-10 h-10 bg-white dark:bg-stone-900 rounded-[14px] border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
+                  className="w-10 h-10 bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
                 </button>
               </div>
 
-              <div className="bg-white dark:bg-stone-900 rounded-[24px] border border-stone-100 dark:border-stone-800 overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
+              <div className="bg-white dark:bg-stone-900 rounded-[32px] border border-stone-100 dark:border-stone-800 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto no-scrollbar">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-stone-50 dark:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800">
-                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest">Ngày</th>
-                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest">Mã đơn</th>
-                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Tổng thu</th>
-                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">VAT 8%</th>
-                        <th className="p-4 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Thuần</th>
+                        <th className="p-5 text-[9px] font-black text-stone-400 uppercase tracking-[0.2em]">Ngày</th>
+                        <th className="p-5 text-[9px] font-black text-stone-400 uppercase tracking-[0.2em]">Mã đơn</th>
+                        <th className="p-5 text-[9px] font-black text-stone-400 uppercase tracking-[0.2em] text-right">Tổng thu</th>
+                        <th className="p-5 text-[9px] font-black text-stone-400 uppercase tracking-[0.2em] text-right">VAT 8%</th>
+                        <th className="p-5 text-[9px] font-black text-stone-400 uppercase tracking-[0.2em] text-right">Thuần</th>
                       </tr>
                     </thead>
                     <tbody>
                       {useData().financeData.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-12 text-center text-stone-400 font-bold">Chưa có dữ liệu báo cáo</td>
+                          <td colSpan={5} className="p-20 text-center">
+                            <div className="flex flex-col items-center justify-center">
+                              <BarChart3 className="w-10 h-10 text-stone-200 mb-4" />
+                              <p className="text-xs font-black text-stone-400 uppercase tracking-widest">Chưa có dữ liệu báo cáo</p>
+                            </div>
+                          </td>
                         </tr>
                       ) : (
                         useData().financeData.slice().reverse().map((row, idx) => (
                           <tr key={`finance-row-${idx}`} className="border-b border-stone-50 dark:border-stone-800 last:border-0 hover:bg-stone-50/50 dark:hover:bg-stone-800/20 transition-colors">
-                            <td className="p-4 text-xs font-bold text-stone-600 dark:text-stone-400">
+                            <td className="p-5 text-[10px] font-bold text-stone-500 dark:text-stone-400">
                               {new Date(row["Ngày"] || row["timestamp"] || "").toLocaleDateString('vi-VN')}
                             </td>
-                            <td className="p-4 text-xs font-black text-stone-800 dark:text-white">#{row["Mã đơn"] || row["orderId"]}</td>
-                            <td className="p-4 text-xs font-black text-emerald-600 text-right">{Number(row["Tổng thu"] || row["total"] || 0).toLocaleString()}đ</td>
-                            <td className="p-4 text-xs font-bold text-red-500 text-right">{Number(row["VAT 8%"] || row["vat"] || 0).toLocaleString()}đ</td>
-                            <td className="p-4 text-xs font-black text-blue-600 text-right">{Number(row["Thuần"] || row["net"] || 0).toLocaleString()}đ</td>
+                            <td className="p-5 text-[10px] font-black text-stone-800 dark:text-white">#{row["Mã đơn"] || row["orderId"]}</td>
+                            <td className="p-5 text-xs font-black text-emerald-600 text-right">{Number(row["Tổng thu"] || row["total"] || 0).toLocaleString()}đ</td>
+                            <td className="p-5 text-xs font-bold text-red-500 text-right">{Number(row["VAT 8%"] || row["vat"] || 0).toLocaleString()}đ</td>
+                            <td className="p-5 text-xs font-black text-blue-600 text-right">{Number(row["Thuần"] || row["net"] || 0).toLocaleString()}đ</td>
                           </tr>
                         ))
                       )}
@@ -1612,20 +1634,23 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-5"
+              className="space-y-6"
             >
               <div className="flex justify-between items-center px-1">
-                <h2 className="text-stone-400 dark:text-stone-500 font-black text-xs uppercase tracking-widest">Quản lý chi tiêu</h2>
+                <div className="space-y-0.5">
+                  <h2 className="text-stone-800 dark:text-white font-black text-lg tracking-tight">Quản lý chi tiêu</h2>
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Sổ quỹ & Giao dịch</p>
+                </div>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => fetchTransactions()}
-                    className="w-10 h-10 bg-white dark:bg-stone-900 rounded-[14px] border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
+                    className="w-10 h-10 bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 flex items-center justify-center text-stone-400 dark:text-stone-500 tap-active shadow-sm"
                   >
-                    <RefreshCw className="w-4 h-4" />
+                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#C9252C]' : ''}`} />
                   </button>
                   <button 
                     onClick={() => setShowExpenseForm(true)}
-                    className="w-12 h-12 bg-[#C9252C] text-white rounded-[16px] flex items-center justify-center shadow-lg shadow-red-100 dark:shadow-none tap-active hover:bg-[#a01d23] transition-colors"
+                    className="w-12 h-12 bg-[#C9252C] text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-100 dark:shadow-none tap-active hover:bg-red-700 transition-all active:scale-95"
                   >
                     <Plus className="w-6 h-6" />
                   </button>
@@ -1634,9 +1659,17 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
 
               {/* Expense Chart */}
               {expensesByCategory.length > 0 && (
-                <div className="card p-6 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-[24px] shadow-sm">
-                  <h3 className="text-sm font-black text-stone-800 dark:text-white mb-4 uppercase tracking-widest">Phân bổ chi tiêu</h3>
-                  <div className="h-[300px] w-full min-h-[300px]">
+                <div className="bg-white dark:bg-stone-900 p-8 rounded-[40px] border border-stone-100 dark:border-stone-800 shadow-sm space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-stone-800 dark:text-white text-sm uppercase tracking-widest">Phân bổ chi tiêu</h3>
+                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Theo danh mục</p>
+                    </div>
+                    <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center">
+                      <PieChartIcon className="w-6 h-6 text-stone-400" />
+                    </div>
+                  </div>
+                  <div className="h-[280px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -1644,24 +1677,23 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
                           cx="50%"
                           cy="50%"
                           innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
+                          outerRadius={85}
+                          paddingAngle={8}
                           dataKey="value"
+                          stroke="none"
                         >
                           {expensesByCategory.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={EXPENSE_COLORS[index % EXPENSE_COLORS.length]} stroke="none" />
+                            <Cell key={`cell-${index}`} fill={EXPENSE_COLORS[index % EXPENSE_COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip 
-                          formatter={(value: number) => value.toLocaleString() + 'đ'}
-                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
-                          itemStyle={{ color: '#000', fontWeight: 'bold' }}
+                          contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '16px', fontWeight: 'bold' }}
+                          formatter={(value: number) => [value.toLocaleString() + 'đ', 'Số tiền']}
                         />
                         <Legend 
                           verticalAlign="bottom" 
-                          height={36}
                           iconType="circle"
-                          formatter={(value, entry: any) => <span className="text-xs font-bold text-stone-500 ml-1">{value}</span>}
+                          formatter={(value) => <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-1">{value}</span>}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -1672,37 +1704,53 @@ export function StaffView({ appsScriptUrl }: StaffViewProps) {
               {/* Expense List */}
               <div className="space-y-4">
                 {expenses.length === 0 ? (
-                  <div className="text-center py-20 flex flex-col items-center justify-center">
-                    <div className="w-16 h-16 bg-stone-50 dark:bg-stone-800 rounded-[24px] flex items-center justify-center mb-4 text-stone-300 dark:text-stone-600">
-                      <Wallet className="w-8 h-8" />
+                  <div className="text-center py-24 flex flex-col items-center justify-center">
+                    <div className="w-20 h-20 bg-stone-100 dark:bg-stone-800 rounded-[32px] flex items-center justify-center mb-6 text-stone-300 dark:text-stone-600">
+                      <Wallet className="w-10 h-10" />
                     </div>
-                    <p className="text-stone-400 dark:text-stone-500 font-bold">Chưa có khoản chi nào</p>
+                    <h3 className="text-lg font-black text-stone-800 dark:text-white tracking-tight">Chưa có chi tiêu</h3>
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mt-2">Ghi lại các khoản chi của quán</p>
                   </div>
                 ) : (
                   expenses.map((expense, index) => (
-                    <div key={`expense-item-${index}`} className="card p-5 flex items-center justify-between bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800">
+                    <motion.div 
+                      key={`expense-item-${index}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white dark:bg-stone-900 p-5 rounded-[32px] border border-stone-100 dark:border-stone-800 shadow-sm flex items-center justify-between hover:shadow-md transition-all"
+                    >
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 text-stone-400 dark:text-stone-500 rounded-[16px] flex items-center justify-center border border-stone-100 dark:border-stone-800">
-                          <Wallet className="w-5 h-5" />
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${
+                          expense.phan_loai === 'Thu' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
+                        }`}>
+                          {expense.phan_loai === 'Thu' ? <ArrowDownRight className="w-6 h-6" /> : <ArrowUpRight className="w-6 h-6" />}
                         </div>
                         <div>
-                          <h4 className="font-bold text-stone-800 dark:text-white text-lg leading-none mb-1">{expense.ghi_chu}</h4>
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-widest">
-                            <span className="bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">{expense.danh_muc}</span>
-                            <span>•</span>
-                            <span>{new Date(expense.thoi_gian).toLocaleDateString('vi-VN')}</span>
+                          <h4 className="font-black text-stone-800 dark:text-white text-sm tracking-tight">{expense.ghi_chu}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 dark:bg-stone-800 px-2 py-0.5 rounded-md border border-stone-100 dark:border-stone-700">{expense.danh_muc}</span>
+                            <span className="text-[9px] font-bold text-stone-300 dark:text-stone-600">•</span>
+                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">{new Date(expense.thoi_gian).toLocaleDateString('vi-VN')}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="text-right flex items-center gap-4">
-                        <p className={`${expense.phan_loai === 'Thu' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} font-black text-lg`}>
-                          {expense.phan_loai === 'Thu' ? '+' : '-'}{Number(expense.so_tien).toLocaleString()}đ
-                        </p>
-                        <button onClick={() => deleteExpense(expense.id_thu_chi)} className="w-8 h-8 flex items-center justify-center bg-stone-50 dark:bg-stone-800 rounded-xl text-stone-300 dark:text-stone-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 tap-active transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className={`font-black text-base tracking-tighter ${expense.phan_loai === 'Thu' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {expense.phan_loai === 'Thu' ? '+' : '-'}{Number(expense.so_tien).toLocaleString()}
+                            <span className="text-[9px] ml-0.5 uppercase">đ</span>
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            if (window.confirm('Xóa giao dịch này?')) deleteExpense(expense.id_thu_chi);
+                          }}
+                          className="w-10 h-10 flex items-center justify-center bg-stone-50 dark:bg-stone-800 rounded-xl text-stone-300 dark:text-stone-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 tap-active transition-all active:scale-90"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    </div>
+                    </motion.div>
                   ))
                 )}
               </div>
